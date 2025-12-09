@@ -1219,6 +1219,11 @@
       isPlaying = false;
       updatePlayButton();
       positionSlider.value = 0;
+      // Also reset monitor preview
+      applyMonitorPosition(0);
+      monitorProgressBar.style.width = '0%';
+      monitorPercent.textContent = '0%';
+      positionValue.textContent = '0%';
       ipcRenderer.send('playback-control', {
         isPlaying: false,
         speed: parseInt(speedSlider.value),
@@ -1234,6 +1239,10 @@
       };
       if (includePosition) {
         state.position = parseInt(positionSlider.value);
+        // Also update monitor preview immediately
+        applyMonitorPosition(state.position);
+        monitorProgressBar.style.width = state.position + '%';
+        monitorPercent.textContent = Math.round(state.position) + '%';
       }
       ipcRenderer.send('playback-control', state);
     }
