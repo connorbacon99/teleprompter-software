@@ -2692,7 +2692,7 @@
           'Xenova/' + modelName,
           {
             cache_dir: cacheDir,
-            local_files_only: isModelCached, // Skip network if already cached
+            local_files_only: false, // Always allow network - library uses cache automatically
             progress_callback: (progress) => {
               console.log('Whisper progress:', progress);
               if (progress.status === 'downloading' && !isModelCached) {
