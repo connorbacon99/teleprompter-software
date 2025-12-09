@@ -32,29 +32,44 @@
 
 ```
 teleprompter-software/
-├── package.json           # Project config, dependencies, build settings
-├── development_context.md # This file - development tracking
+├── package.json              # Project config, dependencies, build settings
+├── package-lock.json         # Dependency lock file
+├── development_context.md    # This file - development tracking
+├── assets/
+│   ├── icon.svg              # Source icon (umbrella design, cyan/blue gradient)
+│   ├── icon.png              # Generated 512x512 icon for builds
+│   ├── icon@2x.png           # Generated 1024x1024 for retina displays
+│   └── icon_*.png            # Various sizes for platform iconsets
+├── scripts/
+│   └── generate-icons.js     # Converts SVG to PNG icons using sharp
 └── src/
-    ├── main.js           # Electron main process
-    │                      - Window management (operator + teleprompter)
-    │                      - IPC handlers for inter-window communication
-    │                      - File dialog and document reading
-    │                      - Display detection and management
+    ├── main.js               # Electron main process
+    │                          - Window management (operator + teleprompter)
+    │                          - IPC handlers for inter-window communication
+    │                          - File dialog and document reading
+    │                          - Display detection and management
+    │                          - Remote control HTTP server
+    │                          - Auto-update with electron-updater
     │
-    ├── operator.html     # Operator control panel UI
-    │                      - Script editor
-    │                      - Display selection
-    │                      - Playback controls
-    │                      - Style settings (font, color, mirror/flip)
+    ├── operator.html         # Operator control panel UI
+    │                          - Modern dark theme (purple/cyan accents)
+    │                          - Script editor with monitor preview
+    │                          - Display selection
+    │                          - Playback controls with countdown
+    │                          - Style settings (font, color, mirror/flip)
+    │                          - Cue markers with custom modal
+    │                          - Remote control with QR code
+    │                          - Update notification banner
     │
-    └── teleprompter.html # Teleprompter display output
-                           - Full-screen script display
-                           - Smooth auto-scrolling animation
-                           - Reading guide line at center
-                           - Gradient overlays for focus
-                           - Status indicator (playing/paused)
-                           - Mirror/flip transform support
-                           - Receives commands from operator via IPC
+    └── teleprompter.html     # Teleprompter display output
+                               - Full-screen script display
+                               - Smooth auto-scrolling animation
+                               - Reading guide line at center
+                               - Gradient overlays for focus
+                               - Countdown overlay (3-2-1-GO)
+                               - Status indicator (playing/paused)
+                               - Mirror/flip transform support
+                               - Receives commands from operator via IPC
 ```
 
 ---
@@ -63,7 +78,10 @@ teleprompter-software/
 
 - **electron** (^28.0.0) - Desktop application framework
 - **electron-builder** (^24.9.1) - Build/packaging tool
+- **electron-updater** (^6.6.2) - Auto-update from GitHub Releases
 - **mammoth** (^1.6.0) - Word document (.docx) parsing
+- **qrcode** (^1.5.4) - QR code generation for remote control
+- **sharp** (^0.34.5, devDep) - SVG to PNG icon conversion
 
 ---
 
@@ -205,13 +223,84 @@ teleprompter-software/
 
 ---
 
+### 2025-12-08 - UI Modernization & Remote Control Enhancement
+- Complete UI redesign with modern dark theme:
+  - Purple (#8b5cf6) and cyan (#06b6d4) accent gradient
+  - Glass-like panels with subtle transparency
+  - Improved button states and hover effects
+  - Better typography and spacing
+- QR code for remote control:
+  - Auto-generates QR code when remote server starts
+  - Displays in Remote Control panel for easy phone scanning
+  - Uses qrcode library for generation
+- Fixed Word document import:
+  - Preserves paragraph breaks properly
+  - Converts single line breaks (soft returns) to spaces
+  - Cleans up excess whitespace
+
+---
+
+### 2025-12-08 - Bug Fixes & Polish
+- Fixed monitor scroll direction:
+  - Wheel event now properly handles both up/down scrolling
+  - Uses Math.sign() for reliable direction detection
+  - Added proper event handling (stopPropagation, passive: false)
+- Fixed cue markers modal:
+  - Replaced browser prompt() (doesn't work in Electron) with custom modal
+  - Modal styled to match app theme
+  - Keyboard support (Enter to save, Escape to cancel)
+- Fixed UI inconsistencies:
+  - Ghost "New" button now has visible background
+  - "Seconds" label color matches other text
+  - Hidden browser number input spinners for cleaner look
+
+---
+
+### 2025-12-08 - New App Icon & Deployment Setup
+- New umbrella icon design:
+  - Cyan-to-blue gradient (#00C6FB to #005BEA)
+  - Umbrella with teleprompter text lines motif
+  - SVG-based for scalability
+- Icon generation pipeline:
+  - scripts/generate-icons.js converts SVG to PNG
+  - Generates all required sizes (16-1024px)
+  - Prebuild hook auto-runs before `npm run build`
+  - Uses sharp library for high-quality conversion
+- Updated electron-builder config:
+  - icon.png now used for app icons
+  - Works across Mac, Windows, Linux builds
+
+---
+
+### 2025-12-08 - Auto-Update via GitHub Releases
+- Integrated electron-updater for automatic updates:
+  - Checks for updates on app startup (production only)
+  - Update banner appears when new version available
+  - Download progress shown in banner
+  - "Restart Now" to install downloaded update
+- GitHub Releases integration:
+  - Configured publish settings for connorbacon99/teleprompter-software
+  - Build outputs include update metadata (latest-mac.yml)
+- Update workflow:
+  1. Update version in package.json
+  2. Run `npm run build:mac`
+  3. Create GitHub Release with tag
+  4. Upload DMG and yml files
+  5. Users get notified automatically
+
+---
+
 ## TODO / Upcoming
 
 - [x] Verify macOS version compatibility (Electron 28 supports 10.15+) ✓
+- [x] Add QR code for remote control ✓
+- [x] Modern UI redesign ✓
+- [x] Auto-update from GitHub Releases ✓
 - [ ] Add estimated read time display
 - [ ] Add script import from Google Docs
 - [ ] Implement script sections/chapters
 - [ ] Add ability to customize reading guide line
+- [ ] Code signing for Mac (remove "unidentified developer" warning)
 
 ---
 
