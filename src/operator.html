@@ -930,6 +930,8 @@
     });
 
     // Scale the monitor preview to fit the container
+    // NOTE: Monitor preview always shows readable text (no mirror/flip)
+    // Mirror/flip only affects the teleprompter display output
     function updateMonitorScale() {
       const containerWidth = monitorContainer.clientWidth;
       const containerHeight = monitorContainer.clientHeight;
@@ -938,24 +940,13 @@
       monitorPreview.style.width = teleprompterDimensions.width + 'px';
       monitorPreview.style.height = teleprompterDimensions.height + 'px';
 
-      // Scale to fit the container (scale only, no flip here)
+      // Scale to fit the container
       const scaleX = containerWidth / teleprompterDimensions.width;
       const scaleY = containerHeight / teleprompterDimensions.height;
       const scale = Math.min(scaleX, scaleY);
       monitorPreview.style.transform = `scale(${scale})`;
 
-      // Apply mirror/flip to the inner container (with center transform-origin)
-      let flipTransform = '';
-      if (mirrorCheckbox.checked && flipCheckbox.checked) {
-        flipTransform = 'scale(-1, -1)';
-      } else if (mirrorCheckbox.checked) {
-        flipTransform = 'scaleX(-1)';
-      } else if (flipCheckbox.checked) {
-        flipTransform = 'scaleY(-1)';
-      }
-      monitorFlipContainer.style.transform = flipTransform;
-
-      // Also sync current text and settings
+      // Sync text and visual settings (but NOT mirror/flip - monitor always readable)
       updateMonitorText();
       monitorScriptText.style.fontSize = fontSizeInput.value + 'px';
       monitorScriptText.style.color = textColorInput.value;
