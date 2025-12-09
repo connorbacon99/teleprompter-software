@@ -735,6 +735,67 @@
 
     .tab-content { display: none; }
     .tab-content.active { display: block; }
+
+    /* Update Banner */
+    .update-banner {
+      display: none;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-secondary) 100%);
+      padding: 10px 20px;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .update-banner.visible { display: flex; }
+    .update-banner-icon {
+      width: 20px;
+      height: 20px;
+      fill: white;
+    }
+    .update-banner-text {
+      flex: 1;
+      font-size: 13px;
+      font-weight: 500;
+      color: white;
+    }
+    .update-banner-text span { opacity: 0.8; font-weight: 400; }
+    .update-banner .btn {
+      background: rgba(255,255,255,0.2);
+      border-color: rgba(255,255,255,0.3);
+      color: white;
+      padding: 6px 12px;
+      font-size: 11px;
+    }
+    .update-banner .btn:hover {
+      background: rgba(255,255,255,0.3);
+      border-color: rgba(255,255,255,0.4);
+      transform: none;
+      box-shadow: none;
+    }
+    .update-banner-close {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.7);
+      cursor: pointer;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .update-banner-close:hover { color: white; }
+    .update-banner-close svg { width: 16px; height: 16px; fill: currentColor; }
+    .update-progress {
+      height: 3px;
+      background: rgba(255,255,255,0.3);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 6px;
+    }
+    .update-progress-bar {
+      height: 100%;
+      background: white;
+      border-radius: 2px;
+      transition: width 0.3s;
+    }
   </style>
 </head>
 <body>
@@ -791,6 +852,20 @@
       <span id="fileName">No file loaded</span>
     </div>
   </header>
+
+  <!-- Update Banner -->
+  <div class="update-banner" id="updateBanner">
+    <svg class="update-banner-icon" viewBox="0 0 24 24">
+      <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
+    </svg>
+    <div class="update-banner-text" id="updateText">
+      Update available <span id="updateVersion"></span>
+    </div>
+    <button class="btn" id="updateActionBtn">Download</button>
+    <button class="update-banner-close" id="updateCloseBtn">
+      <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+    </button>
+  </div>
 
   <main class="main">
     <div class="script-panel">
@@ -1767,6 +1842,73 @@
     // Initial
     sendSettings();
     renderCueList();
+
+    // ===== Auto-Update Handling =====
+    const updateBanner = document.getElementById('updateBanner');
+    const updateText = document.getElementById('updateText');
+    const updateVersion = document.getElementById('updateVersion');
+    const updateActionBtn = document.getElementById('updateActionBtn');
+    const updateCloseBtn = document.getElementById('updateCloseBtn');
+
+    let updateState = 'idle'; // idle, available, downloading, downloaded
+
+    function showUpdateBanner() {
+      updateBanner.classList.add('visible');
+    }
+
+    function hideUpdateBanner() {
+      updateBanner.classList.remove('visible');
+    }
+
+    // Handle update status messages from main process
+    ipcRenderer.on('update-status', (event, data) => {
+      switch (data.status) {
+        case 'available':
+          updateState = 'available';
+          updateVersion.textContent = `(v${data.version})`;
+          updateText.innerHTML = `Update available <span>${updateVersion.textContent}</span>`;
+          updateActionBtn.textContent = 'Download';
+          showUpdateBanner();
+          break;
+
+        case 'downloading':
+          updateState = 'downloading';
+          const percent = Math.round(data.percent);
+          updateText.innerHTML = `Downloading update... <span>${percent}%</span>`;
+          updateActionBtn.textContent = 'Downloading...';
+          updateActionBtn.disabled = true;
+          break;
+
+        case 'downloaded':
+          updateState = 'downloaded';
+          updateText.innerHTML = `Update ready <span>(v${data.version})</span>`;
+          updateActionBtn.textContent = 'Restart Now';
+          updateActionBtn.disabled = false;
+          break;
+
+        case 'error':
+          updateState = 'idle';
+          hideUpdateBanner();
+          break;
+
+        case 'not-available':
+          updateState = 'idle';
+          break;
+      }
+    });
+
+    // Handle button clicks
+    updateActionBtn.addEventListener('click', async () => {
+      if (updateState === 'available') {
+        await ipcRenderer.invoke('download-update');
+      } else if (updateState === 'downloaded') {
+        await ipcRenderer.invoke('install-update');
+      }
+    });
+
+    updateCloseBtn.addEventListener('click', () => {
+      hideUpdateBanner();
+    });
   </script>
 </body>
 </html>

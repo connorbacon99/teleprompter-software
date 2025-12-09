@@ -5,6 +5,11 @@ const mammoth = require('mammoth');
 const http = require('http');
 const os = require('os');
 const QRCode = require('qrcode');
+const { autoUpdater } = require('electron-updater');
+
+// Configure auto-updater
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = true;
 
 let operatorWindow = null;
 let teleprompterWindow = null;
@@ -848,8 +853,91 @@ ipcMain.handle('get-remote-status', () => {
   };
 });
 
+// Auto-updater event handlers
+autoUpdater.on('checking-for-update', () => {
+  if (operatorWindow) {
+    operatorWindow.webContents.send('update-status', { status: 'checking' });
+  }
+});
+
+autoUpdater.on('update-available', (info) => {
+  if (operatorWindow) {
+    operatorWindow.webContents.send('update-status', {
+      status: 'available',
+      version: info.version,
+      releaseNotes: info.releaseNotes
+    });
+  }
+});
+
+autoUpdater.on('update-not-available', () => {
+  if (operatorWindow) {
+    operatorWindow.webContents.send('update-status', { status: 'not-available' });
+  }
+});
+
+autoUpdater.on('download-progress', (progress) => {
+  if (operatorWindow) {
+    operatorWindow.webContents.send('update-status', {
+      status: 'downloading',
+      percent: progress.percent
+    });
+  }
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  if (operatorWindow) {
+    operatorWindow.webContents.send('update-status', {
+      status: 'downloaded',
+      version: info.version
+    });
+  }
+});
+
+autoUpdater.on('error', (err) => {
+  if (operatorWindow) {
+    operatorWindow.webContents.send('update-status', {
+      status: 'error',
+      message: err.message
+    });
+  }
+});
+
+// IPC handlers for updates
+ipcMain.handle('check-for-updates', async () => {
+  try {
+    return await autoUpdater.checkForUpdates();
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
+ipcMain.handle('download-update', async () => {
+  try {
+    await autoUpdater.downloadUpdate();
+    return { success: true };
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
+ipcMain.handle('install-update', () => {
+  autoUpdater.quitAndInstall(false, true);
+});
+
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
+});
+
 app.whenReady().then(() => {
   createOperatorWindow();
+
+  // Check for updates after app is ready (only in production)
+  if (app.isPackaged) {
+    setTimeout(() => {
+      autoUpdater.checkForUpdates().catch(() => {});
+    }, 3000);
+  }
 });
 
 app.on('window-all-closed', () => {

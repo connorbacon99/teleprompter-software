@@ -19,6 +19,7 @@
     "sharp": "^0.34.5"
   },
   "dependencies": {
+    "electron-updater": "^6.6.2",
     "mammoth": "^1.6.0",
     "qrcode": "^1.5.4"
   },
@@ -26,6 +27,11 @@
     "appId": "com.umbrellaprompter.app",
     "productName": "Umbrellaprompter",
     "icon": "assets/icon.png",
+    "publish": {
+      "provider": "github",
+      "owner": "connorbacon99",
+      "repo": "teleprompter-software"
+    },
     "mac": {
       "category": "public.app-category.productivity"
     },
