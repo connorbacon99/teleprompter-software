@@ -2664,38 +2664,47 @@
         }
 
         // Configure transformers.js for Electron environment
-        // Set env settings before pipeline call
         env.localModelPath = cacheDir;
         env.cacheDir = cacheDir;
         env.allowLocalModels = true;
         env.allowRemoteModels = true;
 
-        // Override the cache implementation for Electron
-        // Use a custom fetch-based approach if env settings don't work
         console.log('Whisper: Using cache directory:', cacheDir);
-        console.log('Whisper: env object keys:', Object.keys(env));
 
-        whisperModelStatusText.textContent = 'Downloading model (~75MB)...';
+        // Check if model is already cached (look for the config.json file)
+        const modelName = 'whisper-tiny.en';
+        const modelCachePath = path.join(cacheDir, 'Xenova', modelName);
+        const modelConfigPath = path.join(modelCachePath, 'config.json');
+        const isModelCached = fs.existsSync(modelConfigPath);
 
-        // Use whisper-tiny for fastest loading (English-only variant)
-        // Smaller model = less chance of download/cache issues
+        console.log('Whisper: Model cache path:', modelCachePath);
+        console.log('Whisper: Model is cached:', isModelCached);
+
+        if (isModelCached) {
+          whisperModelStatusText.textContent = 'Loading model...';
+          whisperModelProgressBar.style.width = '50%';
+        } else {
+          whisperModelStatusText.textContent = 'Downloading model (~40MB)...';
+        }
+
         whisperTranscriber = await pipeline(
           'automatic-speech-recognition',
-          'Xenova/whisper-tiny.en',
+          'Xenova/' + modelName,
           {
             cache_dir: cacheDir,
-            local_files_only: false,
+            local_files_only: isModelCached, // Skip network if already cached
             progress_callback: (progress) => {
               console.log('Whisper progress:', progress);
-              if (progress.status === 'downloading') {
+              if (progress.status === 'downloading' && !isModelCached) {
                 const percent = progress.progress || 0;
                 whisperModelProgressBar.style.width = percent + '%';
                 whisperModelStatusText.textContent = `Downloading... ${Math.round(percent)}%`;
-              } else if (progress.status === 'loading') {
-                whisperModelStatusText.textContent = 'Loading model into memory...';
-                whisperModelProgressBar.style.width = '100%';
-              } else if (progress.status === 'ready') {
+              } else if (progress.status === 'loading' || progress.status === 'initiate') {
+                whisperModelStatusText.textContent = 'Loading model...';
+                whisperModelProgressBar.style.width = '75%';
+              } else if (progress.status === 'ready' || progress.status === 'done') {
                 whisperModelStatusText.textContent = 'Model ready!';
+                whisperModelProgressBar.style.width = '100%';
               }
             }
           }
