@@ -2666,52 +2666,103 @@
         }
 
         // Configure transformers.js for Electron environment
+        // IMPORTANT: Must set these BEFORE calling pipeline
+        env.useBrowserCache = false;  // Force Node.js file system caching
+        env.useFS = true;             // Enable file system access
         env.localModelPath = cacheDir;
         env.cacheDir = cacheDir;
         env.allowLocalModels = true;
         env.allowRemoteModels = true;
 
         console.log('Whisper: Using cache directory:', cacheDir);
+        console.log('Whisper: env.useBrowserCache:', env.useBrowserCache);
+        console.log('Whisper: env.useFS:', env.useFS);
 
-        // Check if model is already cached (look for the config.json file)
+        // Check if model is already cached (look for the ONNX files)
         const modelName = 'whisper-base.en';
         const modelCachePath = path.join(cacheDir, 'Xenova', modelName);
         const modelConfigPath = path.join(modelCachePath, 'config.json');
-        const isModelCached = fs.existsSync(modelConfigPath);
+        const onnxDir = path.join(modelCachePath, 'onnx');
+        const encoderPath = path.join(onnxDir, 'encoder_model.onnx');
+        const decoderPath = path.join(onnxDir, 'decoder_model_merged.onnx');
+
+        const configExists = fs.existsSync(modelConfigPath);
+        const encoderExists = fs.existsSync(encoderPath);
+        const decoderExists = fs.existsSync(decoderPath);
+        const isModelCached = configExists && encoderExists && decoderExists;
 
         console.log('Whisper: Model cache path:', modelCachePath);
-        console.log('Whisper: Model is cached:', isModelCached);
+        console.log('Whisper: config.json exists:', configExists);
+        console.log('Whisper: encoder_model.onnx exists:', encoderExists);
+        console.log('Whisper: decoder_model_merged.onnx exists:', decoderExists);
+        console.log('Whisper: Model is fully cached:', isModelCached);
 
-        if (isModelCached) {
-          whisperModelStatusText.textContent = 'Loading model...';
-          whisperModelProgressBar.style.width = '50%';
-        } else {
-          whisperModelStatusText.textContent = 'Downloading model (~280MB)...';
+        // List files in cache for debugging
+        if (configExists) {
+          try {
+            const files = fs.readdirSync(modelCachePath);
+            console.log('Whisper: Files in model cache:', files);
+            if (fs.existsSync(onnxDir)) {
+              const onnxFiles = fs.readdirSync(onnxDir);
+              console.log('Whisper: Files in onnx folder:', onnxFiles);
+            }
+          } catch (e) {
+            console.log('Whisper: Could not list cache files:', e.message);
+          }
         }
 
-        whisperTranscriber = await pipeline(
-          'automatic-speech-recognition',
-          'Xenova/' + modelName,
-          {
-            cache_dir: cacheDir,
-            local_files_only: false, // Always allow network - library uses cache automatically
-            progress_callback: (progress) => {
-              console.log('Whisper progress:', progress);
-              if (progress.status === 'downloading' && !isModelCached) {
-                const percent = progress.progress || 0;
-                whisperModelProgressBar.style.width = percent + '%';
-                whisperModelStatusText.textContent = `Downloading... ${Math.round(percent)}%`;
-              } else if (progress.status === 'loading' || progress.status === 'initiate') {
-                whisperModelStatusText.textContent = 'Loading model...';
-                whisperModelProgressBar.style.width = '75%';
-              } else if (progress.status === 'ready' || progress.status === 'done') {
-                whisperModelStatusText.textContent = 'Model ready!';
-                whisperModelProgressBar.style.width = '100%';
-                whisperModelSpinner.style.display = 'none';
+        if (isModelCached) {
+          whisperModelStatusText.textContent = 'Loading cached model...';
+          whisperModelProgressBar.style.width = '50%';
+
+          // Load directly from local path when cached
+          console.log('Whisper: Loading model from local path:', modelCachePath);
+          whisperTranscriber = await pipeline(
+            'automatic-speech-recognition',
+            modelCachePath,  // Use local path directly
+            {
+              local_files_only: true,
+              progress_callback: (progress) => {
+                console.log('Whisper progress:', progress);
+                if (progress.status === 'loading' || progress.status === 'initiate') {
+                  whisperModelStatusText.textContent = 'Loading model...';
+                  whisperModelProgressBar.style.width = '75%';
+                } else if (progress.status === 'ready' || progress.status === 'done') {
+                  whisperModelStatusText.textContent = 'Model ready!';
+                  whisperModelProgressBar.style.width = '100%';
+                  whisperModelSpinner.style.display = 'none';
+                }
               }
             }
-          }
-        );
+          );
+        } else {
+          whisperModelStatusText.textContent = 'Downloading model (~280MB)...';
+
+          // Download from Hugging Face Hub
+          whisperTranscriber = await pipeline(
+            'automatic-speech-recognition',
+            'Xenova/' + modelName,
+            {
+              cache_dir: cacheDir,
+              local_files_only: false,
+              progress_callback: (progress) => {
+                console.log('Whisper progress:', progress);
+                if (progress.status === 'downloading') {
+                  const percent = progress.progress || 0;
+                  whisperModelProgressBar.style.width = percent + '%';
+                  whisperModelStatusText.textContent = `Downloading... ${Math.round(percent)}%`;
+                } else if (progress.status === 'loading' || progress.status === 'initiate') {
+                  whisperModelStatusText.textContent = 'Loading model...';
+                  whisperModelProgressBar.style.width = '75%';
+                } else if (progress.status === 'ready' || progress.status === 'done') {
+                  whisperModelStatusText.textContent = 'Model ready!';
+                  whisperModelProgressBar.style.width = '100%';
+                  whisperModelSpinner.style.display = 'none';
+                }
+              }
+            }
+          );
+        }
 
         whisperModelLoaded = true;
         whisperModelStatus.style.display = 'none';
@@ -2722,6 +2773,7 @@
         console.error('Whisper: Failed to load model:', error);
         whisperModelStatusText.textContent = 'Failed to load model: ' + error.message;
         whisperModelProgressBar.style.width = '0%';
+        whisperModelSpinner.style.display = 'none';
         throw error;
       }
     }

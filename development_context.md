@@ -373,6 +373,22 @@ teleprompter-software/
 
 ---
 
+### 2025-12-09 - Bug Fix: Whisper Model Loading in Electron
+- Fixed "Unable to get model file path or buffer" error when loading cached Whisper model
+- Root cause: transformers.js library couldn't resolve cached file paths in Electron renderer
+- Fixes applied:
+  1. Added `env.useBrowserCache = false` to force Node.js file system caching
+  2. Added `env.useFS = true` to explicitly enable file system access
+  3. Now checks for all required files (config.json + ONNX models) before considering cached
+  4. When model is cached, loads directly from local path instead of via Hugging Face hub
+  5. Added extensive debug logging to trace cache file locations
+  6. Hide spinner on both success AND failure states
+- Separated cached vs download loading paths:
+  - Cached: Uses local filesystem path directly with `local_files_only: true`
+  - Download: Uses standard Hugging Face hub with `cache_dir` option
+
+---
+
 ## TODO / Upcoming
 
 - [x] Verify macOS version compatibility (Electron 28 supports 10.15+) ✓
