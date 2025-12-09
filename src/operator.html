@@ -142,6 +142,32 @@
 
     .file-indicator .dot { width: 6px; height: 6px; background: var(--success); border-radius: 50%; }
 
+    /* Version display */
+    .version-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: 12px;
+      padding-left: 12px;
+      border-left: 1px solid var(--border);
+    }
+    .version-badge {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      background: var(--bg-tertiary);
+      padding: 4px 8px;
+      border-radius: var(--radius-sm);
+      font-weight: 500;
+    }
+    .btn-check-updates {
+      padding: 4px 10px;
+      font-size: 10px;
+    }
+    .btn-check-updates.checking {
+      opacity: 0.6;
+      pointer-events: none;
+    }
+
     /* Main Layout */
     .main { display: flex; flex: 1; overflow: hidden; }
 
@@ -850,6 +876,11 @@
     <div class="file-indicator">
       <span class="dot"></span>
       <span id="fileName">No file loaded</span>
+    </div>
+
+    <div class="version-info">
+      <span class="version-badge" id="versionBadge">v1.0.0</span>
+      <button class="btn btn-check-updates" id="checkUpdatesBtn">Check for Updates</button>
     </div>
   </header>
 
@@ -1843,6 +1874,16 @@
     sendSettings();
     renderCueList();
 
+    // ===== Version Display =====
+    const versionBadge = document.getElementById('versionBadge');
+    const checkUpdatesBtn = document.getElementById('checkUpdatesBtn');
+
+    // Fetch and display app version on load
+    (async function() {
+      const version = await ipcRenderer.invoke('get-app-version');
+      versionBadge.textContent = `v${version}`;
+    })();
+
     // ===== Auto-Update Handling =====
     const updateBanner = document.getElementById('updateBanner');
     const updateText = document.getElementById('updateText');
@@ -1908,6 +1949,30 @@
 
     updateCloseBtn.addEventListener('click', () => {
       hideUpdateBanner();
+    });
+
+    // Manual check for updates button
+    checkUpdatesBtn.addEventListener('click', async () => {
+      checkUpdatesBtn.classList.add('checking');
+      checkUpdatesBtn.textContent = 'Checking...';
+
+      await ipcRenderer.invoke('check-for-updates');
+
+      // Reset button after a short delay (update-status event will handle showing banner if available)
+      setTimeout(() => {
+        checkUpdatesBtn.classList.remove('checking');
+        checkUpdatesBtn.textContent = 'Check for Updates';
+      }, 2000);
+    });
+
+    // Also update button text when update status changes
+    ipcRenderer.on('update-status', (event, data) => {
+      if (data.status === 'not-available') {
+        checkUpdatesBtn.textContent = 'Up to date!';
+        setTimeout(() => {
+          checkUpdatesBtn.textContent = 'Check for Updates';
+        }, 3000);
+      }
     });
   </script>
 </body>
