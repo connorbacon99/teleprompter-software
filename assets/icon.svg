@@ -1,53 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="mainGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#8b5cf6"/>
-      <stop offset="100%" stop-color="#06b6d4"/>
+    <linearGradient id="umbrellaGrad" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00C6FB"/>
+      <stop offset="100%" stop-color="#005BEA"/>
     </linearGradient>
-    <linearGradient id="handleGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#8b5cf6"/>
-      <stop offset="100%" stop-color="#7c3aed"/>
-    </linearGradient>
+
+    <mask id="iconCutout" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+      <rect width="512" height="512" rx="100" fill="white"/>
+      <g fill="black">
+        <path fill-rule="evenodd" clip-rule="evenodd" d="M256 120C183.107 120 124 179.107 124 252H164C164 201.189 205.189 160 256 160C306.811 160 348 201.189 348 252H388C388 179.107 328.893 120 256 120Z"/>
+        <path d="M174 272L202 360H310L338 272H174Z"/>
+        <rect x="215" y="300" width="82" height="12" rx="6"/>
+        <rect x="215" y="324" width="50" height="12" rx="6"/>
+      </g>
+    </mask>
   </defs>
 
-  <!-- Background -->
-  <rect width="512" height="512" rx="100" fill="#0a0a0f"/>
-
-  <!-- Subtle glow effect -->
-  <ellipse cx="256" cy="200" rx="180" ry="80" fill="#8b5cf6" opacity="0.1"/>
-
-  <!-- Main umbrella canopy - clean geometric arc -->
-  <path d="M256 100 C140 100 80 180 80 260 L432 260 C432 180 372 100 256 100"
-        stroke="url(#mainGrad)"
-        stroke-width="16"
-        fill="none"
-        stroke-linecap="round"
-        stroke-linejoin="round"/>
-
-  <!-- Inner detail lines -->
-  <path d="M168 260 C168 200 200 140 256 120"
-        stroke="url(#mainGrad)"
-        stroke-width="8"
-        fill="none"
-        opacity="0.4"
-        stroke-linecap="round"/>
-  <path d="M344 260 C344 200 312 140 256 120"
-        stroke="url(#mainGrad)"
-        stroke-width="8"
-        fill="none"
-        opacity="0.4"
-        stroke-linecap="round"/>
-
-  <!-- Handle - vertical line -->
-  <line x1="256" y1="260" x2="256" y2="380"
-        stroke="url(#handleGrad)"
-        stroke-width="16"
-        stroke-linecap="round"/>
-
-  <!-- Handle curve -->
-  <path d="M256 380 C256 420 290 440 320 420"
-        stroke="url(#handleGrad)"
-        stroke-width="16"
-        fill="none"
-        stroke-linecap="round"/>
+  <rect width="512" height="512" rx="100" fill="url(#umbrellaGrad)" mask="url(#iconCutout)"/>
 </svg>

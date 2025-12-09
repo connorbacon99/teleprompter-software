@@ -607,6 +607,53 @@
     .cue-item:hover .cue-delete { opacity: 1; }
     .no-cues { font-size: 11px; color: var(--text-tertiary); text-align: center; padding: 16px; }
 
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .modal-overlay.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      min-width: 300px;
+      max-width: 400px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+    .modal h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--text-primary);
+    }
+    .modal input[type="text"] {
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 16px;
+      font-size: 14px;
+    }
+    .modal-buttons {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .modal-buttons .btn {
+      padding: 10px 20px;
+    }
+
     /* Remote Control */
     .remote-status { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
     .remote-status .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
@@ -694,19 +741,23 @@
   <header class="header">
     <div class="logo">
       <div class="logo-icon">
-        <svg viewBox="0 0 32 32" fill="none">
+        <svg viewBox="0 0 512 512" fill="none">
           <defs>
-            <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#8b5cf6"/>
-              <stop offset="100%" stop-color="#06b6d4"/>
+            <linearGradient id="umbrellaGrad" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#00C6FB"/>
+              <stop offset="100%" stop-color="#005BEA"/>
             </linearGradient>
+            <mask id="iconCutout" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+              <rect width="512" height="512" rx="100" fill="white"/>
+              <g fill="black">
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M256 120C183.107 120 124 179.107 124 252H164C164 201.189 205.189 160 256 160C306.811 160 348 201.189 348 252H388C388 179.107 328.893 120 256 120Z"/>
+                <path d="M174 272L202 360H310L338 272H174Z"/>
+                <rect x="215" y="300" width="82" height="12" rx="6"/>
+                <rect x="215" y="324" width="50" height="12" rx="6"/>
+              </g>
+            </mask>
           </defs>
-          <!-- Abstract geometric umbrella - clean lines -->
-          <path d="M16 4C8 4 4 10 4 16h24c0-6-4-12-12-12z" stroke="url(#logoGrad)" stroke-width="2" fill="none" stroke-linecap="round"/>
-          <path d="M10 16c0-4 2.5-8 6-10" stroke="url(#logoGrad)" stroke-width="1.5" fill="none" opacity="0.5"/>
-          <path d="M22 16c0-4-2.5-8-6-10" stroke="url(#logoGrad)" stroke-width="1.5" fill="none" opacity="0.5"/>
-          <line x1="16" y1="16" x2="16" y2="26" stroke="url(#logoGrad)" stroke-width="2" stroke-linecap="round"/>
-          <path d="M16 26c0 2 2 3 3.5 3s3-1.5 3-3" stroke="url(#logoGrad)" stroke-width="2" fill="none" stroke-linecap="round"/>
+          <rect width="512" height="512" rx="100" fill="url(#umbrellaGrad)" mask="url(#iconCutout)"/>
         </svg>
       </div>
       <span class="logo-text">Umbrellaprompter</span>
@@ -979,6 +1030,18 @@
       </div>
     </aside>
   </main>
+
+  <!-- Cue Name Modal -->
+  <div class="modal-overlay" id="cueModal">
+    <div class="modal">
+      <h3>Add Cue Marker</h3>
+      <input type="text" id="cueNameInput" placeholder="Enter cue name...">
+      <div class="modal-buttons">
+        <button class="btn" id="cueCancelBtn">Cancel</button>
+        <button class="btn primary" id="cueSaveBtn">Add Cue</button>
+      </div>
+    </div>
+  </div>
 
   <script>
     const { ipcRenderer } = require('electron');
@@ -1518,23 +1581,58 @@
       });
     }
 
+    // Cue modal elements
+    const cueModal = document.getElementById('cueModal');
+    const cueNameInput = document.getElementById('cueNameInput');
+    const cueSaveBtn = document.getElementById('cueSaveBtn');
+    const cueCancelBtn = document.getElementById('cueCancelBtn');
+    let pendingCue = null;
+
+    function showCueModal(defaultName) {
+      cueNameInput.value = defaultName;
+      cueModal.classList.add('visible');
+      setTimeout(() => cueNameInput.focus(), 100);
+    }
+
+    function hideCueModal() {
+      cueModal.classList.remove('visible');
+      pendingCue = null;
+    }
+
     document.getElementById('addCueBtn').addEventListener('click', () => {
       const cursorPos = scriptText.selectionStart;
       const textBefore = scriptText.value.substring(Math.max(0, cursorPos - 30), cursorPos);
       const textAfter = scriptText.value.substring(cursorPos, cursorPos + 20);
       const preview = (textBefore + '|' + textAfter).replace(/\n/g, ' ').trim();
 
-      const name = prompt('Enter a name for this cue marker:', `Cue ${cueMarkers.length + 1}`);
-      if (name) {
+      pendingCue = { position: cursorPos, preview: preview };
+      showCueModal(`Cue ${cueMarkers.length + 1}`);
+    });
+
+    cueSaveBtn.addEventListener('click', () => {
+      const name = cueNameInput.value.trim();
+      if (name && pendingCue) {
         cueMarkers.push({
           name: name,
-          position: cursorPos,
-          preview: preview
+          position: pendingCue.position,
+          preview: pendingCue.preview
         });
         cueMarkers.sort((a, b) => a.position - b.position);
         renderCueList();
         sendScript();
       }
+      hideCueModal();
+    });
+
+    cueCancelBtn.addEventListener('click', hideCueModal);
+
+    cueModal.addEventListener('click', (e) => {
+      if (e.target === cueModal) hideCueModal();
+    });
+
+    cueNameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') cueSaveBtn.click();
+      if (e.key === 'Escape') hideCueModal();
     });
 
     // Jump to cue from remote
