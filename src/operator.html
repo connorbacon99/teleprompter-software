@@ -116,8 +116,10 @@
       transition: all var(--transition);
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 6px;
       letter-spacing: 0.02em;
+      text-align: center;
     }
 
     .btn:hover { background: var(--bg-hover); border-color: var(--accent); transform: translateY(-1px); }
@@ -350,6 +352,143 @@
     @keyframes pulse {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.5; }
+    }
+
+    /* Monitor Countdown Overlay */
+    .monitor-countdown-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.9);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 500;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+
+    .monitor-countdown-overlay.visible {
+      opacity: 1;
+    }
+
+    .monitor-countdown-number {
+      font-size: 200px;
+      font-weight: 700;
+      color: #3b82f6;
+      line-height: 1;
+      animation: monitorCountdownPulse 1s ease-in-out infinite;
+    }
+
+    .monitor-countdown-text {
+      font-size: 24px;
+      color: #71717a;
+      margin-top: 20px;
+      text-transform: uppercase;
+      letter-spacing: 4px;
+    }
+
+    @keyframes monitorCountdownPulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.1); opacity: 0.8; }
+    }
+
+    .monitor-countdown-go {
+      font-size: 150px;
+      font-weight: 700;
+      color: #22c55e;
+      animation: monitorGoAnimation 0.5s ease-out forwards;
+    }
+
+    @keyframes monitorGoAnimation {
+      0% { transform: scale(0.5); opacity: 0; }
+      50% { transform: scale(1.2); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    /* Spinner animation for loading */
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    /* Voice Follow */
+    .voice-follow-section {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .voice-follow-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .voice-follow-header label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .voice-follow-header .mic-icon {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+    }
+
+    .voice-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      background: var(--bg-secondary);
+      border-radius: var(--radius-md);
+      font-size: 11px;
+      color: var(--text-tertiary);
+    }
+
+    .voice-status.listening {
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--success);
+    }
+
+    .voice-status.listening .voice-indicator {
+      background: var(--success);
+      animation: voicePulse 1s ease-in-out infinite;
+    }
+
+    .voice-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-tertiary);
+    }
+
+    @keyframes voicePulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.3); opacity: 0.7; }
+    }
+
+    .voice-transcript {
+      margin-top: 8px;
+      padding: 8px;
+      background: var(--bg-secondary);
+      border-radius: var(--radius-md);
+      font-size: 11px;
+      color: var(--text-tertiary);
+      max-height: 60px;
+      overflow-y: auto;
+      font-style: italic;
+    }
+
+    .voice-transcript .heard-word {
+      color: var(--success);
+      font-weight: 500;
     }
 
     /* Control Panel */
@@ -927,6 +1066,11 @@
                     <div class="script-text" id="monitorScriptText">Waiting for script...</div>
                   </div>
                   <div class="gradient-bottom"></div>
+                  <!-- Countdown Overlay -->
+                  <div class="monitor-countdown-overlay" id="monitorCountdownOverlay">
+                    <div class="monitor-countdown-number" id="monitorCountdownNumber">3</div>
+                    <div class="monitor-countdown-text">Starting in...</div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -939,6 +1083,10 @@
               <div class="status-dot" id="monitorStatusDot"></div>
               <span id="monitorStatusText">Ready</span>
             </div>
+            <button class="btn" id="addCueFromMonitorBtn" style="padding: 4px 8px; font-size: 10px;">
+              <svg viewBox="0 0 24 24" style="width: 12px; height: 12px;"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+              Add Cue
+            </button>
             <span id="monitorPercent">0%</span>
           </div>
         </div>
@@ -1000,6 +1148,51 @@
             <span class="slider-value" id="speedValue">30</span>
           </div>
           <input type="range" id="speedSlider" min="1" max="100" value="30">
+        </div>
+
+        <!-- Voice Follow -->
+        <div class="voice-follow-section">
+          <div class="voice-follow-header">
+            <label for="voiceFollowCheckbox">
+              <svg class="mic-icon" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+              Voice Follow
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="voiceFollowCheckbox">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <!-- Whisper Info -->
+          <div style="font-size: 10px; color: var(--text-tertiary); margin-bottom: 8px;">
+            Uses Whisper AI - runs locally, free. First use downloads ~40MB model.
+          </div>
+          <!-- Whisper Model Status -->
+          <div id="whisperModelStatus" style="display: none; margin-bottom: 8px; padding: 8px; background: var(--bg-tertiary); border-radius: var(--radius-sm); font-size: 11px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div class="spinner" style="width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+              <span id="whisperModelStatusText">Loading Whisper model...</span>
+            </div>
+            <div id="whisperModelProgress" style="margin-top: 6px; height: 4px; background: var(--bg-secondary); border-radius: 2px; overflow: hidden;">
+              <div id="whisperModelProgressBar" style="height: 100%; background: var(--accent); width: 0%; transition: width 0.3s;"></div>
+            </div>
+          </div>
+          <div class="voice-input-select" style="margin-bottom: 8px;">
+            <select id="audioInputSelect" style="width: 100%; padding: 6px 8px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 11px;">
+              <option value="">Default Microphone</option>
+            </select>
+          </div>
+          <div class="voice-status" id="voiceStatus">
+            <div class="voice-indicator"></div>
+            <span id="voiceStatusText">Off</span>
+            <button class="btn" id="voicePauseBtn" style="display: none; margin-left: auto; padding: 2px 8px; font-size: 10px;">Pause</button>
+          </div>
+          <div class="voice-transcript" id="voiceTranscript" style="display: none;">
+            Listening...
+          </div>
+          <div class="voice-debug" id="voiceDebug" style="display: none; margin-top: 6px; padding: 6px; background: var(--bg-tertiary); border-radius: var(--radius-sm); font-size: 10px; color: var(--text-secondary);">
+            <div>Word: <span id="debugMatchedWord" style="color: #22c55e; font-weight: bold;">-</span></div>
+            <div>Index: <span id="debugWordIndex">0</span> / <span id="debugTotalWords">0</span></div>
+          </div>
         </div>
       </div>
 
@@ -1187,6 +1380,8 @@
     const monitorView = document.getElementById('monitorView');
     const viewEditorBtn = document.getElementById('viewEditorBtn');
     const viewMonitorBtn = document.getElementById('viewMonitorBtn');
+    const monitorCountdownOverlay = document.getElementById('monitorCountdownOverlay');
+    const monitorCountdownNumber = document.getElementById('monitorCountdownNumber');
 
     let isPlaying = false;
     let currentDisplayId = null;
@@ -1194,6 +1389,39 @@
     let currentProjectPath = null;
     let monitorPosition = 0;
     let teleprompterDimensions = { width: 1920, height: 1080 }; // Updated when teleprompter opens
+    let monitorCountdownInterval = null;
+
+    // Run countdown in monitor preview
+    function runMonitorCountdown(seconds) {
+      let count = seconds;
+      monitorCountdownNumber.textContent = count;
+      monitorCountdownNumber.className = 'monitor-countdown-number';
+      monitorCountdownOverlay.querySelector('.monitor-countdown-text').textContent = 'Starting in...';
+      monitorCountdownOverlay.classList.add('visible');
+
+      monitorCountdownInterval = setInterval(() => {
+        count--;
+        if (count > 0) {
+          monitorCountdownNumber.textContent = count;
+        } else if (count === 0) {
+          monitorCountdownNumber.textContent = 'GO';
+          monitorCountdownNumber.className = 'monitor-countdown-go';
+          monitorCountdownOverlay.querySelector('.monitor-countdown-text').textContent = '';
+        } else {
+          clearInterval(monitorCountdownInterval);
+          monitorCountdownOverlay.classList.remove('visible');
+        }
+      }, 1000);
+    }
+
+    // Cancel monitor countdown
+    function cancelMonitorCountdown() {
+      if (monitorCountdownInterval) {
+        clearInterval(monitorCountdownInterval);
+        monitorCountdownInterval = null;
+      }
+      monitorCountdownOverlay.classList.remove('visible');
+    }
 
     // View switching
     viewEditorBtn.addEventListener('click', () => {
@@ -1456,28 +1684,50 @@
 
     // Playback controls
     function updatePlayButton() {
-      if (isPlaying) {
+      // Voice Follow mode: show special state
+      if (voiceFollowActive) {
+        playIcon.innerHTML = '<path d="M12 15c1.66 0 2.99-1.34 2.99-3L15 6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 15 6.7 12H5c0 3.42 2.72 6.23 6 6.72V22h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>';
+        playTextEl.textContent = 'Voice Mode';
+        playPauseBtn.classList.remove('primary', 'success');
+        playPauseBtn.style.opacity = '0.6';
+        playPauseBtn.style.cursor = 'not-allowed';
+      } else if (isPlaying) {
         playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
         playTextEl.textContent = 'Pause';
         playPauseBtn.classList.remove('primary');
         playPauseBtn.classList.add('success');
+        playPauseBtn.style.opacity = '1';
+        playPauseBtn.style.cursor = 'pointer';
       } else {
         playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
         playTextEl.textContent = 'Play';
         playPauseBtn.classList.remove('success');
         playPauseBtn.classList.add('primary');
+        playPauseBtn.style.opacity = '1';
+        playPauseBtn.style.cursor = 'pointer';
       }
       updateMonitorStatus();
     }
 
     playPauseBtn.addEventListener('click', () => {
+      // VOICE FOLLOW MODE: Block play/pause - voice controls everything
+      if (voiceFollowActive) {
+        console.log('Voice Follow mode active - use voice to control teleprompter');
+        return;
+      }
+
       if (!isPlaying && countdownCheckbox.checked) {
-        // Start countdown
-        ipcRenderer.send('start-countdown', parseInt(countdownSeconds.value));
+        // Start countdown on both teleprompter and monitor preview
+        const seconds = parseInt(countdownSeconds.value);
+        ipcRenderer.send('start-countdown', seconds);
+        runMonitorCountdown(seconds);
         isPlaying = true;
         updatePlayButton();
       } else {
         isPlaying = !isPlaying;
+        if (!isPlaying) {
+          cancelMonitorCountdown();
+        }
         updatePlayButton();
         sendPlaybackState();
       }
@@ -1503,6 +1753,7 @@
 
     document.getElementById('stopBtn').addEventListener('click', () => {
       isPlaying = false;
+      cancelMonitorCountdown();
       updatePlayButton();
       positionSlider.value = 0;
       // Also reset monitor preview
@@ -1627,6 +1878,13 @@
       ipcRenderer.send('update-settings', settings);
       // Also sync settings to the monitor preview
       updateMonitorSettings(settings);
+
+      // Reset voice follow state when settings change
+      // Font size changes affect scroll height, so we need fresh state
+      // Note: These variables are defined later in the voice follow section
+      if (typeof window.voiceFollowReset === 'function') {
+        window.voiceFollowReset();
+      }
     }
 
     // Update monitor preview settings to match teleprompter
@@ -1731,6 +1989,19 @@
     });
 
     cueCancelBtn.addEventListener('click', hideCueModal);
+
+    // Add cue from monitor view - uses current position percentage
+    document.getElementById('addCueFromMonitorBtn').addEventListener('click', () => {
+      // Convert percentage to character position
+      const totalChars = scriptText.value.length;
+      const cursorPos = Math.floor((monitorPosition / 100) * totalChars);
+      const textBefore = scriptText.value.substring(Math.max(0, cursorPos - 30), cursorPos);
+      const textAfter = scriptText.value.substring(cursorPos, cursorPos + 20);
+      const preview = (textBefore + '|' + textAfter).replace(/\n/g, ' ').trim();
+
+      pendingCue = { position: cursorPos, preview: preview };
+      showCueModal(`Cue ${cueMarkers.length + 1}`);
+    });
 
     cueModal.addEventListener('click', (e) => {
       if (e.target === cueModal) hideCueModal();
@@ -1972,6 +2243,658 @@
         setTimeout(() => {
           checkUpdatesBtn.textContent = 'Check for Updates';
         }, 3000);
+      }
+    });
+
+    // ============================================
+    // Voice Follow - Speech Recognition Auto-Scroll
+    // Uses Whisper (Local/Free) via Transformers.js
+    // ============================================
+
+    const voiceFollowCheckbox = document.getElementById('voiceFollowCheckbox');
+    const voiceStatus = document.getElementById('voiceStatus');
+    const voiceStatusText = document.getElementById('voiceStatusText');
+    const voiceTranscript = document.getElementById('voiceTranscript');
+    const audioInputSelect = document.getElementById('audioInputSelect');
+    const voicePauseBtn = document.getElementById('voicePauseBtn');
+    const voiceDebug = document.getElementById('voiceDebug');
+    const debugMatchedWord = document.getElementById('debugMatchedWord');
+    const debugWordIndex = document.getElementById('debugWordIndex');
+    const debugTotalWords = document.getElementById('debugTotalWords');
+    const whisperModelStatus = document.getElementById('whisperModelStatus');
+    const whisperModelStatusText = document.getElementById('whisperModelStatusText');
+    const whisperModelProgressBar = document.getElementById('whisperModelProgressBar');
+
+    let voiceFollowActive = false;
+    let voiceFollowPaused = false;
+    let scriptWords = [];
+    let currentWordIndex = 0;
+    let lastMatchedIndex = -1;
+    let mediaStream = null;
+    let audioContext = null;
+    let processor = null;
+
+    // Whisper state
+    let whisperTranscriber = null;
+    let whisperModelLoaded = false;
+    let whisperAudioBuffer = [];
+    let whisperProcessInterval = null;
+    let scriptProcessor = null;
+    const WHISPER_SAMPLE_RATE = 16000;
+    const WHISPER_CHUNK_SECONDS = 3;
+
+    // Populate audio input devices
+    async function populateAudioInputs() {
+      try {
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const audioInputs = devices.filter(d => d.kind === 'audioinput');
+
+        audioInputSelect.innerHTML = '<option value="">Default Microphone</option>';
+        audioInputs.forEach(device => {
+          const option = document.createElement('option');
+          option.value = device.deviceId;
+          option.textContent = device.label || `Microphone ${audioInputSelect.options.length}`;
+          audioInputSelect.appendChild(option);
+        });
+      } catch (err) {
+        console.log('Could not enumerate audio devices:', err);
+      }
+    }
+
+    populateAudioInputs();
+    audioInputSelect.addEventListener('focus', populateAudioInputs);
+
+    // Normalize text for matching
+    function normalizeWord(word) {
+      return word.toLowerCase().replace(/[^\w\s]/g, '').trim();
+    }
+
+    // Prepare script for voice matching
+    function prepareScriptForVoice() {
+      const text = scriptText.value;
+      scriptWords = [];
+      let charIndex = 0;
+
+      const words = text.split(/\s+/);
+      for (const word of words) {
+        if (word.trim()) {
+          const normalized = normalizeWord(word);
+          if (normalized) {
+            const foundIndex = text.indexOf(word, charIndex);
+            const position = foundIndex >= 0 ? foundIndex : charIndex;
+            scriptWords.push({
+              original: word,
+              word: word, // Alias for easier access
+              normalized: normalized,
+              charIndex: position,
+              position: position, // Alias for easier access
+              wordIndex: scriptWords.length
+            });
+            charIndex = foundIndex >= 0 ? foundIndex + word.length : charIndex + word.length + 1;
+          }
+        }
+      }
+
+      currentWordIndex = 0;
+      lastMatchedIndex = -1;
+
+      // Update debug display
+      debugTotalWords.textContent = scriptWords.length;
+      debugWordIndex.textContent = '0';
+      debugMatchedWord.textContent = '-';
+
+      console.log(`Voice: Prepared ${scriptWords.length} words from script`);
+      if (scriptWords.length > 0) {
+        console.log('Voice: First 10 words:', scriptWords.slice(0, 10).map(w => w.normalized));
+      }
+    }
+
+    // ============ PHRASE-BASED VOICE MATCHING ============
+    // More robust approach: accumulate spoken words into a phrase and find best match
+    // Allows recovery when lost, tolerates some misses, and uses confidence scoring
+
+    // Accumulated spoken phrase (rolling buffer of recent words)
+    let spokenPhrase = [];
+    const PHRASE_BUFFER_SIZE = 6;   // Keep last 6 spoken words (smaller = more accurate)
+
+    // Track time since last successful match (for recovery mode)
+    let lastMatchTime = Date.now();
+    const RECOVERY_TIMEOUT = 5000;  // Enter recovery mode after 5 seconds without match
+
+    // Matching parameters
+    const MIN_MATCH_WORDS = 3;      // Need at least 3 matching words (more reliable)
+    const MATCH_THRESHOLD = 0.5;    // At least 50% of phrase should match
+    const NORMAL_SEARCH_AHEAD = 25; // Normal: search 25 words ahead
+    const NORMAL_SEARCH_BEHIND = 3; // Normal: allow 3 words behind (for small corrections)
+    const RECOVERY_SEARCH_RANGE = 100; // Recovery: search 100 words in each direction
+    const MAX_FORWARD_JUMP = 15;    // Never jump more than 15 words forward at once
+
+    // Expose reset function for use by sendSettings()
+    window.voiceFollowReset = function() {
+      currentWordIndex = -1;
+      lastMatchedIndex = -1;
+      spokenPhrase = [];
+      lastMatchTime = Date.now();
+      console.log('Voice: Reset state due to settings change');
+    };
+
+    // Add words to the phrase buffer
+    function addToSpokenPhrase(words) {
+      for (const word of words) {
+        const normalized = normalizeWord(word);
+        if (normalized && normalized.length >= 2) {
+          spokenPhrase.push(normalized);
+          // Keep buffer at max size
+          if (spokenPhrase.length > PHRASE_BUFFER_SIZE) {
+            spokenPhrase.shift();
+          }
+        }
+      }
+    }
+
+    // Find best matching position using phrase matching with scoring
+    function findMatchingWordIndex(spokenWords) {
+      if (scriptWords.length === 0) {
+        console.log('Voice: No script words');
+        return -1;
+      }
+
+      // Add new words to phrase buffer
+      addToSpokenPhrase(spokenWords);
+
+      if (spokenPhrase.length < MIN_MATCH_WORDS) {
+        console.log('Voice: Not enough words in phrase buffer yet');
+        return -1;
+      }
+
+      console.log('Voice: Phrase buffer:', spokenPhrase.join(' '));
+
+      // Determine search range based on whether we're in recovery mode
+      const timeSinceMatch = Date.now() - lastMatchTime;
+      const inRecoveryMode = timeSinceMatch > RECOVERY_TIMEOUT;
+
+      let searchStart, searchEnd;
+      const currentPos = Math.max(0, currentWordIndex);
+
+      if (inRecoveryMode) {
+        // Recovery mode: search a much wider range
+        searchStart = Math.max(0, currentPos - RECOVERY_SEARCH_RANGE);
+        searchEnd = Math.min(scriptWords.length, currentPos + RECOVERY_SEARCH_RANGE);
+        console.log(`Voice: RECOVERY MODE - searching ${searchStart} to ${searchEnd}`);
+      } else {
+        // Normal mode: search ahead with small backward allowance
+        searchStart = Math.max(0, currentPos - NORMAL_SEARCH_BEHIND);
+        searchEnd = Math.min(scriptWords.length, currentPos + NORMAL_SEARCH_AHEAD);
+      }
+
+      let bestMatch = -1;
+      let bestScore = 0;
+      let bestMatchCount = 0;
+
+      // Slide through script looking for best match
+      for (let scriptPos = searchStart; scriptPos < searchEnd; scriptPos++) {
+        let matchCount = 0;
+        let matchedPositions = [];
+
+        // Try to match phrase words against script starting at scriptPos
+        // Allow gaps (skipped words) in both phrase and script
+        let scriptIdx = scriptPos;
+        const maxScriptLookahead = Math.min(scriptWords.length, scriptPos + spokenPhrase.length + 10);
+
+        for (let phraseIdx = 0; phraseIdx < spokenPhrase.length && scriptIdx < maxScriptLookahead; phraseIdx++) {
+          const phraseWord = spokenPhrase[phraseIdx];
+
+          // Look for this phrase word in the next few script words
+          let found = false;
+          for (let lookAhead = 0; lookAhead < 4 && scriptIdx + lookAhead < maxScriptLookahead; lookAhead++) {
+            const scriptWord = scriptWords[scriptIdx + lookAhead].normalized;
+
+            if (scriptWord === phraseWord) {
+              matchCount++;
+              matchedPositions.push(scriptIdx + lookAhead);
+              scriptIdx = scriptIdx + lookAhead + 1;
+              found = true;
+              break;
+            }
+          }
+
+          if (!found) {
+            // Word not found, continue with next phrase word
+            scriptIdx++;
+          }
+        }
+
+        // Calculate match quality
+        const matchPercent = matchCount / spokenPhrase.length;
+
+        if (matchCount >= MIN_MATCH_WORDS && matchPercent >= MATCH_THRESHOLD) {
+          // Calculate the actual position we'd jump to
+          const targetPos = matchedPositions.length > 0 ? matchedPositions[matchedPositions.length - 1] : scriptPos;
+          const jumpDistance = targetPos - currentPos;
+
+          // In normal mode, enforce maximum forward jump limit
+          if (!inRecoveryMode && jumpDistance > MAX_FORWARD_JUMP) {
+            console.log(`Voice: Match at ${scriptPos} rejected - jump too far forward (${jumpDistance} words)`);
+            continue;
+          }
+
+          // Score based on: match percentage + proximity bonus
+          const distanceFromCurrent = scriptPos - currentPos;
+          let proximityBonus = 0;
+
+          // Prefer positions slightly ahead of current (natural reading flow)
+          if (distanceFromCurrent >= 0 && distanceFromCurrent <= 10) {
+            proximityBonus = 0.3;  // Strong bonus for close forward matches
+          } else if (distanceFromCurrent > 10) {
+            // Penalize larger forward jumps
+            proximityBonus = -0.2 * (distanceFromCurrent - 10) / 15;
+          } else if (distanceFromCurrent < 0) {
+            // Penalize backward movement more
+            proximityBonus = -0.4;
+          }
+
+          const score = matchPercent + proximityBonus;
+
+          if (score > bestScore || (score === bestScore && matchCount > bestMatchCount)) {
+            bestScore = score;
+            bestMatchCount = matchCount;
+            // Position at the last matched word
+            bestMatch = targetPos;
+
+            console.log(`Voice: Match at script[${scriptPos}]: ${matchCount}/${spokenPhrase.length} words (${(matchPercent*100).toFixed(0)}%), jump=${jumpDistance}, score=${score.toFixed(2)}`);
+          }
+        }
+      }
+
+      if (bestMatch === -1) {
+        console.log(`Voice: No match found (need ${MIN_MATCH_WORDS}+ words, ${MATCH_THRESHOLD*100}%+ match)`);
+        if (inRecoveryMode) {
+          console.log('Voice: Still in recovery mode, will keep searching wider area');
+        }
+      } else {
+        // Update last match time on successful match
+        lastMatchTime = Date.now();
+      }
+
+      return bestMatch;
+    }
+
+    // Calculate scroll position from word index
+    // Using word index / total words is more stable than character position
+    // because words are more evenly distributed visually regardless of font size
+    function getPositionFromWordIndex(wordIndex) {
+      if (wordIndex < 0 || scriptWords.length === 0) return null;
+      if (wordIndex >= scriptWords.length) wordIndex = scriptWords.length - 1;
+
+      // Use word position as percentage through the document
+      // This is more stable than character-based position when font size changes
+      const percent = (wordIndex / scriptWords.length) * 100;
+      return Math.min(100, Math.max(0, percent));
+    }
+
+    // Update teleprompter position
+    // Look-ahead: position a few words ahead of where speech was matched
+    // This compensates for speech recognition latency and keeps text at reading line
+    const VOICE_LOOKAHEAD_WORDS = 5;
+
+    // Minimum movement to trigger an update (prevents jitter)
+    const MIN_MOVEMENT_PERCENT = 0.3;
+
+    // Maximum backward movement allowed (for small corrections)
+    const MAX_BACKWARD_PERCENT = 2.0;
+
+    function updatePositionFromVoice(wordIndex) {
+      // Apply look-ahead: position ahead of where we matched
+      // This keeps the text you're about to read at the center line
+      const lookaheadIndex = Math.min(wordIndex + VOICE_LOOKAHEAD_WORDS, scriptWords.length - 1);
+      const percent = getPositionFromWordIndex(lookaheadIndex);
+      if (percent === null) {
+        console.log('Voice: Could not get percent for word index', lookaheadIndex);
+        return;
+      }
+
+      const currentPercent = parseFloat(positionSlider.value);
+      const diff = percent - currentPercent;
+
+      // Allow small backward corrections, but not large ones
+      if (diff < -MAX_BACKWARD_PERCENT) {
+        console.log(`Voice: Skipping large backward jump (${diff.toFixed(1)}%)`);
+        return;
+      }
+
+      // Require minimum movement to prevent jitter
+      if (Math.abs(diff) < MIN_MOVEMENT_PERCENT) {
+        console.log(`Voice: Movement too small (${diff.toFixed(2)}%), skipping`);
+        return;
+      }
+
+      console.log(`Voice: Matched word ${wordIndex}, positioning at ${lookaheadIndex} (${VOICE_LOOKAHEAD_WORDS} ahead), ${percent.toFixed(1)}% (diff: ${diff > 0 ? '+' : ''}${diff.toFixed(1)}%)`);
+
+      lastMatchedIndex = wordIndex;
+      currentWordIndex = wordIndex;
+
+      positionSlider.value = percent;
+      positionValue.textContent = Math.round(percent) + '%';
+
+      // Use voice-follow-position for smooth continuous following
+      // This triggers the "camera follow" animation instead of discrete jumps
+      ipcRenderer.send('voice-follow-position', percent);
+
+      applyMonitorPosition(percent);
+      monitorPosition = percent;
+      console.log(`Voice: Moved to position ${percent.toFixed(1)}%`);
+    }
+
+    // Process transcription result
+    function processTranscription(transcript) {
+      if (!transcript || voiceFollowPaused) return;
+
+      console.log('Voice: Received transcript:', transcript);
+      voiceTranscript.textContent = transcript.slice(-100);
+
+      // Match words with at least 2 characters (reduced from 3)
+      const wordsToMatch = transcript.split(/\s+/).filter(w => w.trim().length >= 2);
+      console.log('Voice: Words to match:', wordsToMatch);
+
+      if (wordsToMatch.length > 0) {
+        const matchIndex = findMatchingWordIndex(wordsToMatch);
+        console.log('Voice: Match result:', matchIndex);
+
+        if (matchIndex >= 0) {
+          updatePositionFromVoice(matchIndex);
+
+          // Update debug display
+          const matchedWord = scriptWords[matchIndex];
+          if (matchedWord) {
+            debugMatchedWord.textContent = matchedWord.word;
+            debugWordIndex.textContent = matchIndex;
+
+            // Highlight word in editor
+            highlightWordInEditor(matchedWord.position, matchedWord.word.length);
+          }
+        } else {
+          console.log('Voice: No match found in script');
+        }
+      }
+    }
+
+    // Highlight the current word in the script editor
+    function highlightWordInEditor(charPosition, wordLength) {
+      if (!editorView.classList.contains('active')) return;
+
+      // Set selection to highlight the word
+      scriptText.focus();
+      scriptText.setSelectionRange(charPosition, charPosition + wordLength);
+
+      // Scroll the selection into view
+      const lineHeight = parseInt(window.getComputedStyle(scriptText).lineHeight) || 20;
+      const charsPerLine = Math.floor(scriptText.clientWidth / 8); // Approximate chars per line
+      const lineNumber = Math.floor(charPosition / charsPerLine);
+      const scrollTop = lineNumber * lineHeight - scriptText.clientHeight / 2;
+      scriptText.scrollTop = Math.max(0, scrollTop);
+    }
+
+    // ========== WHISPER IMPLEMENTATION ==========
+
+    // Load Whisper model
+    async function loadWhisperModel() {
+      if (whisperModelLoaded && whisperTranscriber) {
+        return whisperTranscriber;
+      }
+
+      whisperModelStatus.style.display = 'block';
+      whisperModelStatusText.textContent = 'Loading Whisper model...';
+      whisperModelProgressBar.style.width = '0%';
+
+      try {
+        // Use require for Electron compatibility
+        const { pipeline, env } = require('@huggingface/transformers');
+        const path = require('path');
+        const os = require('os');
+        const fs = require('fs');
+
+        // Configure cache directory for Electron
+        const cacheDir = path.join(os.homedir(), '.cache', 'umbrellaprompter', 'models');
+
+        // Ensure cache directory exists
+        if (!fs.existsSync(cacheDir)) {
+          fs.mkdirSync(cacheDir, { recursive: true });
+          console.log('Whisper: Created cache directory:', cacheDir);
+        }
+
+        // Configure transformers.js for Electron environment
+        // Set env settings before pipeline call
+        env.localModelPath = cacheDir;
+        env.cacheDir = cacheDir;
+        env.allowLocalModels = true;
+        env.allowRemoteModels = true;
+
+        // Override the cache implementation for Electron
+        // Use a custom fetch-based approach if env settings don't work
+        console.log('Whisper: Using cache directory:', cacheDir);
+        console.log('Whisper: env object keys:', Object.keys(env));
+
+        whisperModelStatusText.textContent = 'Downloading model (~75MB)...';
+
+        // Use whisper-tiny for fastest loading (English-only variant)
+        // Smaller model = less chance of download/cache issues
+        whisperTranscriber = await pipeline(
+          'automatic-speech-recognition',
+          'Xenova/whisper-tiny.en',
+          {
+            cache_dir: cacheDir,
+            local_files_only: false,
+            progress_callback: (progress) => {
+              console.log('Whisper progress:', progress);
+              if (progress.status === 'downloading') {
+                const percent = progress.progress || 0;
+                whisperModelProgressBar.style.width = percent + '%';
+                whisperModelStatusText.textContent = `Downloading... ${Math.round(percent)}%`;
+              } else if (progress.status === 'loading') {
+                whisperModelStatusText.textContent = 'Loading model into memory...';
+                whisperModelProgressBar.style.width = '100%';
+              } else if (progress.status === 'ready') {
+                whisperModelStatusText.textContent = 'Model ready!';
+              }
+            }
+          }
+        );
+
+        whisperModelLoaded = true;
+        whisperModelStatus.style.display = 'none';
+        console.log('Whisper: Model loaded successfully');
+        return whisperTranscriber;
+
+      } catch (error) {
+        console.error('Whisper: Failed to load model:', error);
+        whisperModelStatusText.textContent = 'Failed to load model: ' + error.message;
+        whisperModelProgressBar.style.width = '0%';
+        throw error;
+      }
+    }
+
+    // Start voice follow with Whisper (local, free)
+    async function startWhisperVoiceFollow() {
+      voiceStatusText.textContent = 'Loading model...';
+
+      try {
+        // Load model first
+        await loadWhisperModel();
+      } catch (error) {
+        voiceStatusText.textContent = 'Model load failed';
+        voiceFollowCheckbox.checked = false;
+        return;
+      }
+
+      voiceStatusText.textContent = 'Starting...';
+
+      // Prepare script words for matching
+      prepareScriptForVoice();
+
+      // Reset position tracking
+      currentWordIndex = -1;
+      lastMatchedIndex = -1;
+      spokenPhrase = [];
+      lastMatchTime = Date.now();
+      whisperAudioBuffer = [];
+
+      // Stop auto-scroll when Voice Follow is active
+      if (isPlaying) {
+        isPlaying = false;
+        ipcRenderer.send('playback-control', {
+          isPlaying: false,
+          speed: parseInt(speedSlider.value)
+        });
+        playBtn.textContent = '▶ Play';
+      }
+
+      const deviceId = audioInputSelect.value;
+      const constraints = {
+        audio: deviceId ? { deviceId: { exact: deviceId } } : true
+      };
+
+      try {
+        audioStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+        audioContext = new AudioContext({ sampleRate: WHISPER_SAMPLE_RATE });
+        const source = audioContext.createMediaStreamSource(audioStream);
+
+        // Create script processor to collect audio samples
+        scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+
+        scriptProcessor.onaudioprocess = (event) => {
+          if (voiceFollowPaused) return;
+
+          const inputData = event.inputBuffer.getChannelData(0);
+          // Copy the data as it gets reused
+          whisperAudioBuffer.push(new Float32Array(inputData));
+        };
+
+        source.connect(scriptProcessor);
+        scriptProcessor.connect(audioContext.destination);
+
+        // Process audio chunks every few seconds
+        whisperProcessInterval = setInterval(async () => {
+          if (voiceFollowPaused || whisperAudioBuffer.length === 0) return;
+
+          // Collect all buffered audio
+          const totalLength = whisperAudioBuffer.reduce((sum, arr) => sum + arr.length, 0);
+          const combinedAudio = new Float32Array(totalLength);
+          let offset = 0;
+          for (const chunk of whisperAudioBuffer) {
+            combinedAudio.set(chunk, offset);
+            offset += chunk.length;
+          }
+
+          // Clear buffer for next chunk
+          whisperAudioBuffer = [];
+
+          // Skip if too short (less than 0.5 seconds)
+          if (combinedAudio.length < WHISPER_SAMPLE_RATE * 0.5) {
+            return;
+          }
+
+          try {
+            // Run transcription (no language/task needed for English-only model)
+            const result = await whisperTranscriber(combinedAudio);
+
+            if (result && result.text) {
+              const transcript = result.text.trim().toLowerCase();
+              if (transcript) {
+                console.log('Whisper:', transcript);
+                voiceTranscript.textContent = transcript;
+
+                // Process the transcript through the word matching system
+                processTranscription(transcript);
+              }
+            }
+          } catch (err) {
+            console.error('Whisper transcription error:', err);
+          }
+
+        }, WHISPER_CHUNK_SECONDS * 1000);
+
+        voiceStatusText.textContent = 'Listening...';
+        voiceStatus.classList.add('listening');
+        voicePauseBtn.style.display = 'inline-block';
+
+      } catch (error) {
+        console.error('Whisper: Microphone error:', error);
+        voiceStatusText.textContent = 'Mic error: ' + error.message;
+        voiceFollowCheckbox.checked = false;
+      }
+    }
+
+    // Stop Whisper voice follow
+    function stopWhisperVoiceFollow() {
+      if (whisperProcessInterval) {
+        clearInterval(whisperProcessInterval);
+        whisperProcessInterval = null;
+      }
+      whisperAudioBuffer = [];
+
+      if (scriptProcessor) {
+        scriptProcessor.disconnect();
+        scriptProcessor = null;
+      }
+
+      if (audioContext) {
+        audioContext.close();
+        audioContext = null;
+      }
+
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+        audioStream = null;
+      }
+
+      voiceStatus.classList.remove('listening');
+      voiceStatusText.textContent = 'Disabled';
+      voicePauseBtn.style.display = 'none';
+      voiceTranscript.textContent = '';
+
+      // Tell teleprompter to stop following
+      ipcRenderer.send('voice-follow-stop');
+    }
+
+    // ========== END WHISPER IMPLEMENTATION ==========
+
+    // Toggle handler - Whisper only
+    voiceFollowCheckbox.addEventListener('change', () => {
+      if (voiceFollowCheckbox.checked) {
+        startWhisperVoiceFollow();
+      } else {
+        stopWhisperVoiceFollow();
+      }
+    });
+
+    // Pause button handler - stops sending audio to save API cost
+    voicePauseBtn.addEventListener('click', () => {
+      voiceFollowPaused = !voiceFollowPaused;
+      if (voiceFollowPaused) {
+        voicePauseBtn.textContent = 'Resume';
+        voiceStatusText.textContent = 'Paused';
+        voiceStatus.classList.remove('listening');
+      } else {
+        voicePauseBtn.textContent = 'Pause';
+        voiceStatusText.textContent = 'Listening...';
+        voiceStatus.classList.add('listening');
+      }
+    });
+
+    // Re-prepare script when text changes
+    scriptText.addEventListener('input', () => {
+      if (voiceFollowActive) {
+        prepareScriptForVoice();
+      }
+    });
+
+    // Re-initialize when audio device changes
+    audioInputSelect.addEventListener('change', () => {
+      if (voiceFollowActive && voiceFollowCheckbox.checked) {
+        stopWhisperVoiceFollow();
+        setTimeout(() => startWhisperVoiceFollow(), 100);
       }
     });
   </script>

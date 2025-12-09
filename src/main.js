@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, screen, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const mammoth = require('mammoth');
@@ -7,6 +7,10 @@ const os = require('os');
 const QRCode = require('qrcode');
 const { autoUpdater } = require('electron-updater');
 
+// Enable Web Speech API - must be set before app ready
+app.commandLine.appendSwitch('enable-speech-dispatcher');
+app.commandLine.appendSwitch('enable-features', 'WebSpeechAPI');
+
 // Configure auto-updater
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = true;
@@ -14,6 +18,8 @@ autoUpdater.autoInstallOnAppQuit = true;
 let operatorWindow = null;
 let teleprompterWindow = null;
 let remoteServer = null;
+let localServer = null;
+let localServerPort = 45678; // Port for serving operator.html locally
 let currentState = {
   script: '',
   isPlaying: false,
@@ -32,6 +38,52 @@ let currentState = {
   cueMarkers: []
 };
 
+// Create local HTTP server for serving operator.html (needed for Web Speech API)
+function createLocalServer() {
+  return new Promise((resolve, reject) => {
+    const mimeTypes = {
+      '.html': 'text/html',
+      '.js': 'text/javascript',
+      '.css': 'text/css',
+      '.json': 'application/json',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.svg': 'image/svg+xml'
+    };
+
+    localServer = http.createServer((req, res) => {
+      let filePath = path.join(__dirname, req.url === '/' ? 'operator.html' : req.url);
+      const ext = path.extname(filePath).toLowerCase();
+      const contentType = mimeTypes[ext] || 'application/octet-stream';
+
+      fs.readFile(filePath, (err, content) => {
+        if (err) {
+          res.writeHead(404);
+          res.end('Not Found');
+        } else {
+          res.writeHead(200, { 'Content-Type': contentType });
+          res.end(content);
+        }
+      });
+    });
+
+    localServer.listen(localServerPort, '127.0.0.1', () => {
+      console.log(`Local server running at http://127.0.0.1:${localServerPort}`);
+      resolve(localServerPort);
+    });
+
+    localServer.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        // Try another port
+        localServerPort++;
+        localServer.listen(localServerPort, '127.0.0.1');
+      } else {
+        reject(err);
+      }
+    });
+  });
+}
+
 function createOperatorWindow() {
   operatorWindow = new BrowserWindow({
     width: 1400,
@@ -39,11 +91,16 @@ function createOperatorWindow() {
     title: 'Umbrellaprompter - Operator',
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false
+      contextIsolation: false,
+      webSecurity: false // Allow loading local resources
     }
   });
 
-  operatorWindow.loadFile(path.join(__dirname, 'operator.html'));
+  // Load from localhost for better API compatibility
+  operatorWindow.loadURL(`http://127.0.0.1:${localServerPort}/operator.html`);
+
+  // Open DevTools for debugging Voice Follow
+  operatorWindow.webContents.openDevTools();
 
   operatorWindow.on('closed', () => {
     operatorWindow = null;
@@ -52,6 +109,9 @@ function createOperatorWindow() {
     }
     if (remoteServer) {
       remoteServer.close();
+    }
+    if (localServer) {
+      localServer.close();
     }
     app.quit();
   });
@@ -713,6 +773,27 @@ ipcMain.on('start-countdown', (event, seconds) => {
   }
 });
 
+// Voice follow position update (smooth continuous following)
+ipcMain.on('voice-follow-position', (event, percent) => {
+  if (teleprompterWindow) {
+    teleprompterWindow.webContents.send('voice-follow-position', percent);
+  }
+});
+
+// Stop voice follow mode
+ipcMain.on('voice-follow-stop', () => {
+  if (teleprompterWindow) {
+    teleprompterWindow.webContents.send('voice-follow-stop');
+  }
+});
+
+// Jump to position (for cue markers - instant, not smooth)
+ipcMain.on('jump-to-position', (event, percent) => {
+  if (teleprompterWindow) {
+    teleprompterWindow.webContents.send('jump-to-position', percent);
+  }
+});
+
 // Open file dialog
 ipcMain.handle('open-file-dialog', async () => {
   const result = await dialog.showOpenDialog(operatorWindow, {
@@ -929,7 +1010,31 @@ ipcMain.handle('get-app-version', () => {
   return app.getVersion();
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Set up permission handler for microphone access
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    const allowedPermissions = ['media', 'microphone', 'audioCapture'];
+    if (allowedPermissions.includes(permission)) {
+      callback(true);
+    } else {
+      callback(false);
+    }
+  });
+
+  // Also handle permission check
+  session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+    const allowedPermissions = ['media', 'microphone', 'audioCapture'];
+    return allowedPermissions.includes(permission);
+  });
+
+  // Start local server first (needed for Web Speech API)
+  try {
+    await createLocalServer();
+    console.log('Local server started successfully');
+  } catch (err) {
+    console.error('Failed to start local server:', err);
+  }
+
   createOperatorWindow();
 
   // Check for updates after app is ready (only in production)
@@ -941,11 +1046,17 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  if (localServer) {
+    localServer.close();
+  }
   app.quit();
 });
 
-app.on('activate', () => {
+app.on('activate', async () => {
   if (BrowserWindow.getAllWindows().length === 0) {
+    if (!localServer) {
+      await createLocalServer();
+    }
     createOperatorWindow();
   }
 });

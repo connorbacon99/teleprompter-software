@@ -81,6 +81,7 @@ teleprompter-software/
 - **electron-updater** (^6.6.2) - Auto-update from GitHub Releases
 - **mammoth** (^1.6.0) - Word document (.docx) parsing
 - **qrcode** (^1.5.4) - QR code generation for remote control
+- **@huggingface/transformers** (^3.4.1) - Whisper speech recognition (local/free)
 - **sharp** (^0.34.5, devDep) - SVG to PNG icon conversion
 
 ---
@@ -304,6 +305,74 @@ teleprompter-software/
 
 ---
 
+### 2025-12-09 - Feature: Voice Follow (Speech Recognition Auto-Scroll)
+- Added Voice Follow feature for hands-free teleprompter control:
+  - Uses Deepgram's Nova-2 speech recognition via WebSocket API
+  - Automatically scrolls teleprompter based on spoken words
+  - Matches spoken words against script text in real-time
+  - Requires internet connection and Deepgram API key (free tier: 45 hrs/month)
+- UI Components:
+  - Toggle switch in Playback section to enable/disable
+  - API key input field with save button (stored in localStorage)
+  - Link to get free Deepgram API key
+  - Audio input device selector
+  - Status indicator showing listening state with animated pulse
+  - Live transcript display showing recognized speech
+- How it works:
+  1. Script is parsed into word array with character positions
+  2. Audio is streamed to Deepgram via WebSocket (16kHz, mono, PCM)
+  3. Transcriptions are matched against script using fuzzy matching
+  4. Position is updated based on matched word's character position
+  5. Only scrolls forward (no backwards movement)
+- Technical details:
+  - Uses Deepgram Nova-2 model with interim results
+  - Search window: -5 to +50 words from current position
+  - Matching: exact match, starts-with (for words > 4 chars)
+  - Position threshold: 0.5% movement required to trigger update
+  - Auto-reconnect on WebSocket disconnect
+- Note: Initially tried Web Speech API but it fails in Electron with "network error"
+
+---
+
+### 2025-12-09 - Feature: Add Cue Markers from Monitor
+- Added "Add Cue" button to monitor status bar
+- Allows setting cue markers while in monitor view based on current scroll position
+- Converts position percentage to character position for accurate cue placement
+
+---
+
+### 2025-12-09 - Bug Fix: Button Text Centering
+- Fixed text centering on Appearance, Cue Markers, and Remote tab buttons
+- Added `justify-content: center` and `text-align: center` to `.btn` class
+
+---
+
+### 2025-12-09 - Feature: Free Local Speech Recognition (Whisper)
+- Added Whisper as a free alternative to Deepgram for Voice Follow
+- Uses Transformers.js with Whisper-tiny.en model (~40MB)
+- Runs entirely locally - no API key required, works offline after model download
+- Speech Engine selector dropdown to choose between:
+  - Whisper (Local - Free): Default option, runs on device
+  - Deepgram (Cloud - API Key): Original cloud-based option
+- Whisper implementation:
+  - Model auto-downloads on first use with progress indicator
+  - Audio captured via Web Audio API (16kHz, mono)
+  - Transcription every 3 seconds for batch processing
+  - Uses same word-matching algorithm as Deepgram
+- Bug fix: Fixed API key not saving due to variable hoisting error
+  - sendSettings() was referencing `spokenPhrase` before it was declared
+  - Changed to use `window.voiceFollowReset()` function pattern
+
+---
+
+### 2025-12-09 - Bug Fix: Whisper Voice Follow Script Matching
+- Fixed "No script words" error when using Whisper voice follow
+- Root cause: `prepareScriptForVoice()` was not being called when starting voice follow
+- Fix: Added `prepareScriptForVoice()` call in `startWhisperVoiceFollow()` function
+- Now properly parses script text into word array before attempting to match spoken words
+
+---
+
 ## TODO / Upcoming
 
 - [x] Verify macOS version compatibility (Electron 28 supports 10.15+) ✓
@@ -311,6 +380,7 @@ teleprompter-software/
 - [x] Modern UI redesign ✓
 - [x] Auto-update from GitHub Releases ✓
 - [x] First release v1.0.0 published ✓
+- [x] Voice Follow (speech recognition auto-scroll) ✓
 - [ ] Add estimated read time display
 - [ ] Add script import from Google Docs
 - [ ] Implement script sections/chapters

@@ -19,6 +19,8 @@
     "sharp": "^0.34.5"
   },
   "dependencies": {
+    "@deepgram/sdk": "^4.11.2",
+    "@huggingface/transformers": "^3.8.1",
     "electron-updater": "^6.6.2",
     "mammoth": "^1.6.0",
     "qrcode": "^1.5.4"

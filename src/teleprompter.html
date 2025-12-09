@@ -188,12 +188,12 @@
 
     <div class="gradient-bottom"></div>
     <div class="status-indicator" id="statusIndicator">PAUSED</div>
-  </div>
 
-  <!-- Countdown Overlay -->
-  <div class="countdown-overlay" id="countdownOverlay">
-    <div class="countdown-number" id="countdownNumber">3</div>
-    <div class="countdown-text">Starting in...</div>
+    <!-- Countdown Overlay - inside container so it gets flipped/mirrored -->
+    <div class="countdown-overlay" id="countdownOverlay">
+      <div class="countdown-number" id="countdownNumber">3</div>
+      <div class="countdown-text">Starting in...</div>
+    </div>
   </div>
 
   <script>
@@ -395,10 +395,107 @@
       container.style.transform = transform;
 
       calculateScrollHeight();
+
+      // After settings change (especially font size), recalculate follow position
+      // This prevents voice follow from breaking when text layout changes
+      if (followActive) {
+        // Update current percent based on new scroll height
+        followCurrentPercent = getCurrentPercentFromPosition();
+        console.log('Settings changed: Updated follow position to', followCurrentPercent.toFixed(2) + '%');
+      }
     });
 
-    // Jump to specific position (for cue markers)
+    // Continuous follow system for voice follow - smooth like a camera following a character
+    let followTargetPercent = 0;
+    let followCurrentPercent = 0;
+    let followActive = false;
+    let followAnimationFrame = null;
+
+    // How quickly to approach target (lower = smoother but slower)
+    // 0.03 means move 3% of the remaining distance each frame
+    // At 60fps: very smooth transitions, reaches 95% in ~1.7sec
+    // Combined with MAX_JUMP_WORDS limit, creates buttery smooth scrolling
+    const FOLLOW_SMOOTHING = 0.03;
+
+    function getCurrentPercentFromPosition() {
+      calculateScrollHeight();
+      const containerHeight = container.clientHeight;
+      const startY = containerHeight * 0.5;
+      const endY = -scriptWrapper.scrollHeight + (containerHeight * 0.5);
+      const range = startY - endY;
+      if (range === 0) return 0;
+      return ((startY - currentPosition) / range) * 100;
+    }
+
+    function applyPercentPosition(percent) {
+      calculateScrollHeight();
+      const containerHeight = container.clientHeight;
+      const startY = containerHeight * 0.5;
+      const endY = -scriptWrapper.scrollHeight + (containerHeight * 0.5);
+      const range = startY - endY;
+
+      currentPosition = startY - (range * (percent / 100));
+      scriptWrapper.style.transform = `translateY(${currentPosition}px)`;
+    }
+
+    function runFollowLoop() {
+      if (!followActive) {
+        followAnimationFrame = null;
+        return;
+      }
+
+      const diff = followTargetPercent - followCurrentPercent;
+
+      // If very close to target, just track it
+      if (Math.abs(diff) < 0.02) {
+        followCurrentPercent = followTargetPercent;
+      } else {
+        // Smoothly ease toward target - creates natural "following" motion
+        followCurrentPercent += diff * FOLLOW_SMOOTHING;
+      }
+
+      applyPercentPosition(followCurrentPercent);
+
+      // Keep the loop running while follow mode is active
+      followAnimationFrame = requestAnimationFrame(runFollowLoop);
+    }
+
+    function setFollowTarget(percent) {
+      console.log('Voice follow: Setting target to', percent.toFixed(2) + '%');
+      followTargetPercent = percent;
+
+      // Start follow loop if not already running
+      if (!followActive) {
+        followActive = true;
+        followCurrentPercent = getCurrentPercentFromPosition();
+        console.log('Voice follow: Starting loop, current position:', followCurrentPercent.toFixed(2) + '%');
+        runFollowLoop();
+      }
+    }
+
+    function stopFollowMode() {
+      followActive = false;
+      if (followAnimationFrame) {
+        cancelAnimationFrame(followAnimationFrame);
+        followAnimationFrame = null;
+      }
+    }
+
+    // Voice follow uses continuous smooth following
+    ipcRenderer.on('voice-follow-position', (event, percent) => {
+      setFollowTarget(percent);
+    });
+
+    // Stop voice follow mode
+    ipcRenderer.on('voice-follow-stop', () => {
+      stopFollowMode();
+    });
+
+    // Jump to specific position (for cue markers - instant jump, not voice follow)
     ipcRenderer.on('jump-to-position', (event, percent) => {
+      // Stop any voice follow animation
+      stopFollowMode();
+      // Direct position update for cue markers
       updatePosition(percent);
     });
 
