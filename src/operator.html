@@ -430,6 +430,16 @@
 
     .style-row input[type="number"]:focus { outline: none; border-color: var(--accent); }
 
+    /* Draggable number input */
+    .style-row input[type="number"].draggable {
+      cursor: ew-resize;
+      user-select: none;
+    }
+
+    .style-row input[type="number"].draggable:active {
+      cursor: ew-resize;
+    }
+
     .color-input-wrapper { position: relative; width: 64px; height: 30px; }
 
     .color-input-wrapper input[type="color"] {
@@ -788,7 +798,7 @@
             </div>
             <div class="style-row">
               <label>Font Size</label>
-              <input type="number" id="fontSizeInput" value="72" min="24" max="200">
+              <input type="number" id="fontSizeInput" class="draggable" value="72" min="24" max="200" title="Click and drag left/right to adjust">
             </div>
             <div class="style-row">
               <label>Text Color</label>
@@ -1477,6 +1487,54 @@
         e.preventDefault();
         document.getElementById('jumpEndBtn').click();
       }
+    });
+
+    // Draggable font size input
+    (function() {
+      let isDragging = false;
+      let startX = 0;
+      let startValue = 0;
+
+      fontSizeInput.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        startX = e.clientX;
+        startValue = parseInt(fontSizeInput.value);
+        e.preventDefault();
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const delta = e.clientX - startX;
+        const newValue = Math.min(200, Math.max(24, startValue + Math.round(delta / 2)));
+        fontSizeInput.value = newValue;
+        sendSettings();
+      });
+
+      document.addEventListener('mouseup', () => {
+        isDragging = false;
+      });
+    })();
+
+    // Scroll in monitor viewport to change position
+    monitorContainer.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      // Calculate scroll amount (normalize for different scroll speeds)
+      const scrollAmount = e.deltaY > 0 ? 1 : -1;
+      // Smaller increments for finer control
+      const increment = 0.5;
+      const newPosition = Math.min(100, Math.max(0, parseFloat(positionSlider.value) + (scrollAmount * increment)));
+
+      positionSlider.value = newPosition;
+      positionValue.textContent = Math.round(newPosition) + '%';
+      applyMonitorPosition(newPosition);
+      monitorProgressBar.style.width = newPosition + '%';
+      monitorPercent.textContent = Math.round(newPosition) + '%';
+
+      // Debounce sending to teleprompter to avoid too many updates
+      clearTimeout(monitorContainer.scrollTimeout);
+      monitorContainer.scrollTimeout = setTimeout(() => {
+        sendPlaybackState(true);
+      }, 50);
     });
 
     // Initial

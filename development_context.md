@@ -192,6 +192,19 @@ teleprompter-software/
 
 ---
 
+### 2025-12-08 - Quality of Life Improvements
+- Added draggable font size input:
+  - Click and drag left/right on the font size number to adjust value
+  - More intuitive than clicking small arrow buttons
+  - Sensitivity: 2 pixels of movement = 1 unit change
+- Added scroll-to-position in monitor viewport:
+  - Mouse wheel scrolling in the monitor preview changes position
+  - 0.5% increments for fine control over long scripts
+  - Debounced updates to teleprompter (50ms) for smooth experience
+  - Updates both local preview and remote teleprompter
+
+---
+
 ## TODO / Upcoming
 
 - [x] Verify macOS version compatibility (Electron 28 supports 10.15+) ✓
