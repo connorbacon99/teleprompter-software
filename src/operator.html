@@ -228,6 +228,8 @@
       position: absolute;
       width: 100%;
       padding: 10% 15%;
+      /* Smooth transition between position updates (updates come ~6x per second) */
+      transition: transform 0.15s linear;
     }
 
     .monitor-preview .script-text {

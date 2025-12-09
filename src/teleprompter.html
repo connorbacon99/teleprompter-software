@@ -259,9 +259,9 @@
 
         scriptWrapper.style.transform = `translateY(${currentPosition}px)`;
 
-        // Send position update to operator every 10 frames (~6 times per second)
+        // Send position update to operator every 5 frames (~12 times per second)
         frameCount++;
-        if (frameCount % 10 === 0) {
+        if (frameCount % 5 === 0) {
           const range = startY - endY;
           const percent = ((startY - currentPosition) / range) * 100;
           // Send both percentage and the actual transform for perfect sync
