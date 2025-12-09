@@ -4,6 +4,7 @@ const fs = require('fs');
 const mammoth = require('mammoth');
 const http = require('http');
 const os = require('os');
+const QRCode = require('qrcode');
 
 let operatorWindow = null;
 let teleprompterWindow = null;
@@ -30,7 +31,7 @@ function createOperatorWindow() {
   operatorWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    title: 'Teleprompter - Operator',
+    title: 'Umbrellaprompter - Operator',
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
@@ -190,6 +191,22 @@ function startRemoteServer(port = 8080) {
       return;
     }
 
+    if (url.pathname === '/api/position' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', () => {
+        const { position } = JSON.parse(body);
+        currentState.position = position;
+        // Send to operator which will update teleprompter
+        if (operatorWindow) {
+          operatorWindow.webContents.send('remote-position', position);
+        }
+        res.writeHead(200);
+        res.end('OK');
+      });
+      return;
+    }
+
     // Serve remote control HTML
     if (url.pathname === '/' || url.pathname === '/remote') {
       res.writeHead(200, { 'Content-Type': 'text/html' });
@@ -229,17 +246,22 @@ function getRemoteControlHTML() {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Teleprompter Remote</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Umbrellaprompter Remote</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    * { margin: 0; padding: 0; box-sizing: border-box; touch-action: manipulation; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
       background: #09090b;
       color: #fafafa;
       min-height: 100vh;
       padding: 20px;
+      padding-bottom: env(safe-area-inset-bottom, 20px);
       -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
     }
     .header {
       text-align: center;
@@ -358,6 +380,49 @@ function getRemoteControlHTML() {
       flex: 1;
       padding: 16px;
     }
+    .position-control {
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .position-control label {
+      display: block;
+      font-size: 13px;
+      color: #71717a;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .position-control label span {
+      color: #fafafa;
+      font-weight: 600;
+    }
+    .position-control input[type="range"] {
+      width: 100%;
+      height: 40px;
+      -webkit-appearance: none;
+      background: #27272a;
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .position-control input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 24px;
+      height: 24px;
+      background: #3b82f6;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+    .position-buttons {
+      display: flex;
+      gap: 8px;
+    }
+    .position-buttons .btn {
+      flex: 1;
+      padding: 12px 8px;
+      font-size: 14px;
+    }
     .cue-list {
       background: #18181b;
       border: 1px solid #27272a;
@@ -392,9 +457,20 @@ function getRemoteControlHTML() {
       text-align: center;
       padding: 20px;
     }
+    /* Loading state - show content only when connected */
+    .controls { opacity: 0.3; pointer-events: none; transition: opacity 0.3s; }
+    body.connected .controls { opacity: 1; pointer-events: auto; }
+    .loading-msg {
+      text-align: center;
+      padding: 40px 20px;
+      color: #71717a;
+      display: block;
+    }
+    body.connected .loading-msg { display: none; }
   </style>
 </head>
 <body>
+  <div class="loading-msg">Connecting to teleprompter...</div>
   <div class="header">
     <h1>Teleprompter Remote</h1>
     <p>Control your teleprompter from this device</p>
@@ -425,6 +501,17 @@ function getRemoteControlHTML() {
       </div>
     </div>
 
+    <div class="position-control">
+      <label>Position <span id="positionDisplay">0%</span></label>
+      <input type="range" id="positionSlider" min="0" max="100" value="0" oninput="updatePositionDisplay()" onchange="setPosition()">
+      <div class="position-buttons">
+        <button class="btn" onclick="nudgePosition(-5)">-5%</button>
+        <button class="btn" onclick="nudgePosition(-1)">-1%</button>
+        <button class="btn" onclick="nudgePosition(1)">+1%</button>
+        <button class="btn" onclick="nudgePosition(5)">+5%</button>
+      </div>
+    </div>
+
     <div class="cue-list">
       <h3>Cue Markers</h3>
       <div id="cueList">
@@ -435,14 +522,21 @@ function getRemoteControlHTML() {
 
   <script>
     let state = { isPlaying: false, speed: 30, cueMarkers: [] };
+    let connected = false;
 
     async function fetchState() {
       try {
         const res = await fetch('/api/state');
+        if (!res.ok) throw new Error('Server error');
         state = await res.json();
+        connected = true;
+        document.body.classList.add('connected');
         updateUI();
       } catch (e) {
-        console.error('Failed to fetch state');
+        connected = false;
+        document.body.classList.remove('connected');
+        document.getElementById('statusText').textContent = 'Connecting...';
+        console.error('Failed to fetch state:', e);
       }
     }
 
@@ -452,6 +546,12 @@ function getRemoteControlHTML() {
       document.getElementById('playPauseText').textContent = state.isPlaying ? 'Pause' : 'Play';
       document.getElementById('playPauseBtn').className = 'btn ' + (state.isPlaying ? 'danger' : 'success');
       document.getElementById('speedDisplay').textContent = state.speed;
+
+      // Update position slider
+      if (state.position !== undefined) {
+        document.getElementById('positionSlider').value = Math.round(state.position);
+        document.getElementById('positionDisplay').textContent = Math.round(state.position) + '%';
+      }
 
       const cueList = document.getElementById('cueList');
       if (state.cueMarkers && state.cueMarkers.length > 0) {
@@ -496,6 +596,34 @@ function getRemoteControlHTML() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ index })
+      });
+    }
+
+    function updatePositionDisplay() {
+      const pos = document.getElementById('positionSlider').value;
+      document.getElementById('positionDisplay').textContent = pos + '%';
+    }
+
+    async function setPosition() {
+      const pos = parseInt(document.getElementById('positionSlider').value);
+      state.position = pos;
+      await fetch('/api/position', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ position: pos })
+      });
+    }
+
+    async function nudgePosition(delta) {
+      const slider = document.getElementById('positionSlider');
+      const newPos = Math.max(0, Math.min(100, parseInt(slider.value) + delta));
+      slider.value = newPos;
+      state.position = newPos;
+      document.getElementById('positionDisplay').textContent = newPos + '%';
+      await fetch('/api/position', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ position: newPos })
       });
     }
 
@@ -599,6 +727,31 @@ ipcMain.handle('open-file-dialog', async () => {
   return result.filePaths[0];
 });
 
+// Clean up text from Word documents
+// - Preserve paragraph breaks (double line breaks)
+// - Convert single line breaks to spaces (these are usually soft returns from Word)
+// - Clean up excess whitespace
+function cleanImportedText(text) {
+  return text
+    // Normalize line endings
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    // Preserve paragraph breaks (2+ newlines) by marking them
+    .replace(/\n\n+/g, '<<<PARA>>>')
+    // Convert remaining single newlines to spaces
+    .replace(/\n/g, ' ')
+    // Restore paragraph breaks
+    .replace(/<<<PARA>>>/g, '\n\n')
+    // Clean up multiple spaces
+    .replace(/  +/g, ' ')
+    // Trim whitespace from each paragraph
+    .split('\n\n')
+    .map(p => p.trim())
+    .filter(p => p.length > 0)
+    .join('\n\n')
+    .trim();
+}
+
 // Read file content
 ipcMain.handle('read-file', async (event, filePath) => {
   try {
@@ -606,10 +759,12 @@ ipcMain.handle('read-file', async (event, filePath) => {
 
     if (ext === '.docx') {
       const result = await mammoth.extractRawText({ path: filePath });
-      return { success: true, content: result.value, fileName: path.basename(filePath) };
+      const cleanedContent = cleanImportedText(result.value);
+      return { success: true, content: cleanedContent, fileName: path.basename(filePath) };
     } else if (ext === '.txt' || ext === '.rtf') {
       const content = fs.readFileSync(filePath, 'utf-8');
-      return { success: true, content, fileName: path.basename(filePath) };
+      const cleanedContent = cleanImportedText(content);
+      return { success: true, content: cleanedContent, fileName: path.basename(filePath) };
     } else {
       const content = fs.readFileSync(filePath, 'utf-8');
       return { success: true, content, fileName: path.basename(filePath) };
@@ -662,7 +817,15 @@ ipcMain.handle('load-project', async () => {
 ipcMain.handle('start-remote-server', async (event, port) => {
   try {
     const result = startRemoteServer(port);
-    return { success: true, ...result };
+    const ip = result.ips[0] || 'localhost';
+    const url = `http://${ip}:${result.port}`;
+    // Generate QR code as data URL
+    const qrDataUrl = await QRCode.toDataURL(url, {
+      width: 200,
+      margin: 2,
+      color: { dark: '#000000', light: '#ffffff' }
+    });
+    return { success: true, ...result, qrCode: qrDataUrl, url };
   } catch (error) {
     return { success: false, error: error.message };
   }

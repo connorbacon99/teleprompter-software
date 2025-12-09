@@ -1,5 +1,5 @@
 {
-  "name": "teleprompter-software",
+  "name": "umbrellaprompter",
   "version": "1.0.0",
   "description": "Professional teleprompter software for studio use",
   "main": "src/main.js",
@@ -16,16 +16,22 @@
     "electron-builder": "^24.9.1"
   },
   "dependencies": {
-    "mammoth": "^1.6.0"
+    "mammoth": "^1.6.0",
+    "qrcode": "^1.5.4"
   },
   "build": {
-    "appId": "com.teleprompter.app",
-    "productName": "Teleprompter",
+    "appId": "com.umbrellaprompter.app",
+    "productName": "Umbrellaprompter",
     "mac": {
-      "category": "public.app-category.productivity"
+      "category": "public.app-category.productivity",
+      "icon": "assets/icon.icns"
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "linux": {
+      "icon": "assets/icon.png"
     }
   }
 }

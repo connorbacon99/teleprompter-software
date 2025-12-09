@@ -3,31 +3,40 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Teleprompter</title>
+  <title>Umbrellaprompter</title>
   <style>
     :root {
-      --bg-primary: #09090b;
-      --bg-secondary: #18181b;
-      --bg-tertiary: #27272a;
-      --bg-hover: #3f3f46;
-      --border: #27272a;
-      --border-subtle: #1f1f23;
-      --text-primary: #fafafa;
-      --text-secondary: #a1a1aa;
-      --text-tertiary: #71717a;
-      --accent: #3b82f6;
-      --accent-hover: #2563eb;
-      --accent-subtle: rgba(59, 130, 246, 0.1);
-      --success: #22c55e;
-      --success-hover: #16a34a;
-      --danger: #ef4444;
+      --bg-primary: #0a0a0f;
+      --bg-secondary: #12121a;
+      --bg-tertiary: #1a1a24;
+      --bg-hover: #252532;
+      --bg-glass: rgba(255, 255, 255, 0.03);
+      --border: #2a2a3a;
+      --border-subtle: #1e1e2a;
+      --border-glow: rgba(139, 92, 246, 0.3);
+      --text-primary: #f0f0f5;
+      --text-secondary: #9090a0;
+      --text-tertiary: #606070;
+      --accent: #8b5cf6;
+      --accent-hover: #7c3aed;
+      --accent-subtle: rgba(139, 92, 246, 0.1);
+      --accent-glow: rgba(139, 92, 246, 0.4);
+      --accent-secondary: #06b6d4;
+      --success: #10b981;
+      --success-hover: #059669;
+      --success-glow: rgba(16, 185, 129, 0.3);
+      --danger: #f43f5e;
       --warning: #f59e0b;
+      --gradient-accent: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%);
+      --gradient-success: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+      --gradient-surface: linear-gradient(180deg, rgba(139, 92, 246, 0.05) 0%, transparent 100%);
       --radius-sm: 6px;
-      --radius-md: 8px;
-      --radius-lg: 12px;
-      --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
-      --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
-      --transition: 150ms ease;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.5);
+      --shadow-md: 0 4px 20px rgba(0,0,0,0.4);
+      --shadow-glow: 0 0 20px var(--accent-glow);
+      --transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -46,61 +55,81 @@
 
     /* Header */
     .header {
-      background: var(--bg-secondary);
-      padding: 10px 16px;
+      background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+      padding: 12px 20px;
       display: flex;
       align-items: center;
-      gap: 10px;
-      border-bottom: 1px solid var(--border);
+      gap: 12px;
+      border-bottom: 1px solid var(--border-subtle);
       -webkit-app-region: drag;
+      position: relative;
+    }
+
+    .header::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent-glow), transparent);
     }
 
     .logo {
       display: flex;
       align-items: center;
-      gap: 8px;
-      margin-right: 4px;
+      gap: 10px;
+      margin-right: 8px;
     }
 
     .logo-icon {
-      width: 26px;
-      height: 26px;
-      background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
-      border-radius: var(--radius-sm);
+      width: 32px;
+      height: 32px;
       display: flex;
       align-items: center;
       justify-content: center;
+      position: relative;
     }
 
-    .logo-icon svg { width: 14px; height: 14px; fill: white; }
-    .logo-text { font-size: 14px; font-weight: 600; letter-spacing: -0.3px; }
-    .header-divider { width: 1px; height: 20px; background: var(--border); }
+    .logo-icon svg { width: 32px; height: 32px; }
+    .logo-text {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+      background: var(--gradient-accent);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .header-divider { width: 1px; height: 24px; background: var(--border); opacity: 0.5; }
 
     .btn {
       -webkit-app-region: no-drag;
       background: var(--bg-tertiary);
       border: 1px solid var(--border);
       color: var(--text-primary);
-      padding: 6px 12px;
+      padding: 8px 14px;
       border-radius: var(--radius-md);
       cursor: pointer;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 500;
       transition: all var(--transition);
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 6px;
+      letter-spacing: 0.02em;
     }
 
-    .btn:hover { background: var(--bg-hover); border-color: var(--bg-hover); }
+    .btn:hover { background: var(--bg-hover); border-color: var(--accent); transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
     .btn.primary { background: var(--accent); border-color: var(--accent); color: white; }
-    .btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .btn.primary:hover { background: var(--accent-hover); box-shadow: 0 4px 16px var(--accent-glow); }
     .btn.success { background: var(--success); border-color: var(--success); color: white; }
-    .btn.success:hover { background: var(--success-hover); border-color: var(--success-hover); }
-    .btn.ghost { background: transparent; border-color: transparent; }
-    .btn.ghost:hover { background: var(--bg-tertiary); }
-    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .btn svg { width: 12px; height: 12px; fill: currentColor; }
+    .btn.success:hover { background: var(--success-hover); box-shadow: 0 4px 16px var(--success-glow); }
+    .btn.ghost { background: var(--bg-tertiary); border-color: var(--border); }
+    .btn.ghost:hover { background: var(--bg-hover); border-color: var(--accent); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .btn svg { width: 13px; height: 13px; fill: currentColor; }
 
     .file-indicator {
       margin-left: auto;
@@ -128,11 +157,10 @@
     }
 
     .script-header h2 {
-      font-size: 12px;
-      font-weight: 500;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: 0.02em;
     }
 
     .script-meta { display: flex; gap: 16px; align-items: center; }
@@ -151,19 +179,20 @@
     .script-editor textarea {
       width: 100%;
       height: 100%;
-      background: var(--bg-secondary);
+      background: var(--bg-tertiary);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
       color: var(--text-primary);
       font-size: 15px;
       line-height: 1.8;
-      padding: 20px;
+      padding: 24px;
       resize: none;
       font-family: inherit;
-      transition: border-color var(--transition);
+      transition: all var(--transition);
     }
 
-    .script-editor textarea:focus { outline: none; border-color: var(--accent); }
+    .script-editor textarea:hover { border-color: var(--text-tertiary); }
+    .script-editor textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-subtle); }
     .script-editor textarea::placeholder { color: var(--text-tertiary); }
 
     /* Live Monitor View - scaled clone of teleprompter */
@@ -300,31 +329,48 @@
     /* Control Panel */
     .control-panel {
       width: 300px;
-      background: var(--bg-secondary);
-      border-left: 1px solid var(--border);
+      background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+      border-left: 1px solid var(--border-subtle);
       padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 14px;
       overflow-y: auto;
+      overscroll-behavior: contain;
     }
 
     .control-section {
-      background: var(--bg-primary);
+      background: var(--bg-glass);
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-lg);
-      padding: 14px;
+      padding: 16px;
+      transition: all var(--transition);
+      backdrop-filter: blur(10px);
     }
 
-    .section-header { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
-    .section-header svg { width: 12px; height: 12px; fill: var(--text-tertiary); }
+    .control-section:hover {
+      border-color: var(--border-glow);
+      box-shadow: 0 0 20px rgba(139, 92, 246, 0.05);
+    }
+
+    .section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .section-header svg { width: 16px; height: 16px; fill: url(#iconGrad); }
+    .section-header .icon-wrapper {
+      width: 28px;
+      height: 28px;
+      background: var(--accent-subtle);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .section-header .icon-wrapper svg { width: 14px; height: 14px; fill: var(--accent); }
 
     .section-header h3 {
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 600;
-      color: var(--text-tertiary);
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
+      color: var(--text-primary);
+      letter-spacing: 0.01em;
     }
 
     /* Select */
@@ -332,41 +378,45 @@
 
     .select-wrapper select {
       width: 100%;
-      padding: 8px 10px;
-      padding-right: 30px;
-      background: var(--bg-secondary);
+      padding: 10px 12px;
+      padding-right: 36px;
+      background: var(--bg-tertiary);
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
       color: var(--text-primary);
       font-size: 12px;
       cursor: pointer;
       appearance: none;
-      transition: border-color var(--transition);
+      transition: all var(--transition);
     }
 
-    .select-wrapper select:focus { outline: none; border-color: var(--accent); }
+    .select-wrapper select:hover { border-color: var(--text-tertiary); }
+    .select-wrapper select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-subtle); }
 
     .select-wrapper::after {
       content: '';
       position: absolute;
-      right: 10px;
+      right: 12px;
       top: 50%;
       transform: translateY(-50%);
       width: 0;
       height: 0;
-      border-left: 4px solid transparent;
-      border-right: 4px solid transparent;
-      border-top: 5px solid var(--text-tertiary);
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 6px solid var(--text-tertiary);
       pointer-events: none;
+      transition: border-color var(--transition);
     }
+
+    .select-wrapper:hover::after { border-top-color: var(--text-secondary); }
 
     .button-row { display: flex; gap: 6px; }
     .button-row .btn { flex: 1; justify-content: center; }
 
     /* Playback */
-    .playback-main { display: grid; grid-template-columns: 1fr auto; gap: 6px; margin-bottom: 12px; }
-    .btn-play { padding: 12px 16px; font-size: 13px; }
-    .btn-reset { padding: 12px 14px; }
+    .playback-main { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 14px; }
+    .btn-play { padding: 14px 20px; font-size: 12px; font-weight: 600; }
+    .btn-reset { padding: 14px 16px; }
 
     /* Slider */
     .slider-group { margin-bottom: 12px; }
@@ -376,18 +426,19 @@
     .slider-label span { font-size: 11px; color: var(--text-secondary); }
 
     .slider-value {
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 600;
-      color: var(--text-primary);
-      background: var(--bg-tertiary);
-      padding: 2px 6px;
+      color: var(--accent);
+      background: var(--accent-subtle);
+      padding: 4px 10px;
       border-radius: var(--radius-sm);
+      font-variant-numeric: tabular-nums;
     }
 
     input[type="range"] {
       width: 100%;
-      height: 4px;
-      border-radius: 2px;
+      height: 6px;
+      border-radius: 3px;
       background: var(--bg-tertiary);
       outline: none;
       -webkit-appearance: none;
@@ -396,16 +447,17 @@
 
     input[type="range"]::-webkit-slider-thumb {
       -webkit-appearance: none;
-      width: 14px;
-      height: 14px;
+      width: 16px;
+      height: 16px;
       border-radius: 50%;
-      background: var(--text-primary);
+      background: var(--accent);
       cursor: pointer;
-      transition: transform var(--transition);
-      box-shadow: var(--shadow-sm);
+      transition: all var(--transition);
+      border: 2px solid var(--bg-primary);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
     }
 
-    input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.1); }
+    input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.1); background: var(--accent-hover); }
 
     /* Position buttons */
     .position-actions { display: flex; gap: 6px; margin-top: 10px; }
@@ -418,17 +470,20 @@
     .style-row label { font-size: 12px; color: var(--text-secondary); }
 
     .style-row input[type="number"] {
-      width: 64px;
-      padding: 6px 8px;
-      background: var(--bg-secondary);
+      width: 70px;
+      padding: 8px 10px;
+      background: var(--bg-tertiary);
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
       color: var(--text-primary);
       font-size: 12px;
+      font-weight: 500;
       text-align: center;
+      transition: all var(--transition);
     }
 
-    .style-row input[type="number"]:focus { outline: none; border-color: var(--accent); }
+    .style-row input[type="number"]:hover { border-color: var(--text-tertiary); }
+    .style-row input[type="number"]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-subtle); }
 
     /* Draggable number input */
     .style-row input[type="number"].draggable {
@@ -440,7 +495,7 @@
       cursor: ew-resize;
     }
 
-    .color-input-wrapper { position: relative; width: 64px; height: 30px; }
+    .color-input-wrapper { position: relative; width: 70px; height: 34px; }
 
     .color-input-wrapper input[type="color"] {
       width: 100%;
@@ -448,12 +503,29 @@
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
       cursor: pointer;
-      padding: 2px;
-      background: var(--bg-secondary);
+      padding: 3px;
+      background: var(--bg-tertiary);
+      transition: all var(--transition);
     }
 
+    .color-input-wrapper input[type="color"]:hover { border-color: var(--text-tertiary); }
+    .color-input-wrapper input[type="color"]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-subtle); }
     .color-input-wrapper input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
-    .color-input-wrapper input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
+    .color-input-wrapper input[type="color"]::-webkit-color-swatch { border: none; border-radius: 6px; }
+
+    /* General text input styling */
+    input[type="text"], input[type="number"] {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      font-size: 12px;
+      padding: 8px 10px;
+      transition: all var(--transition);
+    }
+
+    input[type="text"]:hover, input[type="number"]:hover { border-color: var(--text-tertiary); }
+    input[type="text"]:focus, input[type="number"]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-subtle); }
 
     /* Toggle */
     .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; }
@@ -469,6 +541,7 @@
       background: var(--bg-tertiary);
       border-radius: 11px;
       transition: all var(--transition);
+      border: 1px solid var(--border-subtle);
     }
 
     .toggle-slider::before {
@@ -476,19 +549,28 @@
       content: "";
       height: 16px;
       width: 16px;
-      left: 3px;
-      bottom: 3px;
-      background: var(--text-primary);
+      left: 2px;
+      bottom: 2px;
+      background: var(--text-secondary);
       border-radius: 50%;
       transition: all var(--transition);
     }
 
-    .toggle input:checked + .toggle-slider { background: var(--accent); }
-    .toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
+    .toggle input:checked + .toggle-slider { background: var(--accent); border-color: var(--accent); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(18px); background: white; }
 
     /* Countdown */
     .countdown-row { display: flex; align-items: center; gap: 8px; }
-    .countdown-row input[type="number"] { width: 50px; }
+    .countdown-row label { font-size: 12px; color: var(--text-secondary); }
+    .countdown-row input[type="number"] {
+      width: 60px;
+      -moz-appearance: textfield;
+    }
+    .countdown-row input[type="number"]::-webkit-outer-spin-button,
+    .countdown-row input[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
 
     /* Cue Markers */
     .cue-list { max-height: 150px; overflow-y: auto; margin-top: 10px; }
@@ -530,6 +612,8 @@
     .remote-status .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
     .remote-status .status-dot.active { background: var(--success); }
     .remote-status span { font-size: 12px; color: var(--text-secondary); }
+    .qr-container { text-align: center; margin-bottom: 10px; }
+    .qr-container img { box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
 
     .remote-url {
       background: var(--bg-secondary);
@@ -551,51 +635,55 @@
     /* Keyboard hints */
     .keyboard-hints {
       margin-top: auto;
-      padding: 10px;
-      background: var(--bg-primary);
+      padding: 14px;
+      background: var(--bg-glass);
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-lg);
+      backdrop-filter: blur(10px);
     }
 
     .keyboard-hints h4 {
-      font-size: 9px;
+      font-size: 10px;
       font-weight: 600;
       color: var(--text-tertiary);
       text-transform: uppercase;
-      letter-spacing: 0.8px;
-      margin-bottom: 8px;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
     }
 
-    .hint-row { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; }
-    .hint-row span { font-size: 10px; color: var(--text-tertiary); }
+    .hint-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; }
+    .hint-row span { font-size: 11px; color: var(--text-tertiary); }
 
     .kbd {
       background: var(--bg-tertiary);
       border: 1px solid var(--border);
-      border-radius: 3px;
-      padding: 1px 5px;
-      font-size: 9px;
+      border-radius: 5px;
+      padding: 3px 8px;
+      font-size: 10px;
       font-family: inherit;
+      font-weight: 500;
       color: var(--text-secondary);
+      box-shadow: 0 2px 0 var(--border);
     }
 
     /* Tabs */
-    .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+    .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
 
     .tab {
       flex: 1;
-      padding: 8px;
+      padding: 10px 8px;
       background: transparent;
-      border: 1px solid var(--border);
+      border: 1px solid var(--border-subtle);
       border-radius: var(--radius-md);
       color: var(--text-tertiary);
       font-size: 11px;
+      font-weight: 500;
       cursor: pointer;
       transition: all var(--transition);
       text-align: center;
     }
 
-    .tab:hover { background: var(--bg-tertiary); color: var(--text-secondary); }
+    .tab:hover { background: var(--bg-tertiary); color: var(--text-secondary); border-color: var(--border); }
     .tab.active { background: var(--accent); border-color: var(--accent); color: white; }
 
     .tab-content { display: none; }
@@ -606,9 +694,22 @@
   <header class="header">
     <div class="logo">
       <div class="logo-icon">
-        <svg viewBox="0 0 24 24"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
+        <svg viewBox="0 0 32 32" fill="none">
+          <defs>
+            <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#8b5cf6"/>
+              <stop offset="100%" stop-color="#06b6d4"/>
+            </linearGradient>
+          </defs>
+          <!-- Abstract geometric umbrella - clean lines -->
+          <path d="M16 4C8 4 4 10 4 16h24c0-6-4-12-12-12z" stroke="url(#logoGrad)" stroke-width="2" fill="none" stroke-linecap="round"/>
+          <path d="M10 16c0-4 2.5-8 6-10" stroke="url(#logoGrad)" stroke-width="1.5" fill="none" opacity="0.5"/>
+          <path d="M22 16c0-4-2.5-8-6-10" stroke="url(#logoGrad)" stroke-width="1.5" fill="none" opacity="0.5"/>
+          <line x1="16" y1="16" x2="16" y2="26" stroke="url(#logoGrad)" stroke-width="2" stroke-linecap="round"/>
+          <path d="M16 26c0 2 2 3 3.5 3s3-1.5 3-3" stroke="url(#logoGrad)" stroke-width="2" fill="none" stroke-linecap="round"/>
+        </svg>
       </div>
-      <span class="logo-text">Teleprompter</span>
+      <span class="logo-text">Umbrellaprompter</span>
     </div>
 
     <div class="header-divider"></div>
@@ -732,7 +833,7 @@
           </label>
         </div>
         <div class="countdown-row" id="countdownRow">
-          <label style="font-size: 11px; color: var(--text-tertiary);">Seconds:</label>
+          <label>Seconds:</label>
           <input type="number" id="countdownSeconds" value="3" min="1" max="10">
         </div>
 
@@ -851,7 +952,10 @@
             <button class="btn" id="stopRemoteBtn">Stop</button>
           </div>
           <div class="remote-url" id="remoteUrlBox" style="display: none;">
-            <div class="remote-url-label">Open this URL on your phone:</div>
+            <div class="qr-container">
+              <img id="remoteQrCode" alt="QR Code" style="width: 150px; height: 150px; border-radius: 8px; background: white; padding: 8px;">
+            </div>
+            <div class="remote-url-label">Scan QR code or open URL:</div>
             <div class="remote-url-text" id="remoteUrl"></div>
           </div>
         </div>
@@ -1444,6 +1548,13 @@
       }
     });
 
+    // Handle position change from remote control
+    ipcRenderer.on('remote-position', (event, position) => {
+      positionSlider.value = position;
+      positionValue.textContent = Math.round(position) + '%';
+      sendPlaybackState(true);
+    });
+
     // Remote Control
     document.getElementById('startRemoteBtn').addEventListener('click', async () => {
       const result = await ipcRenderer.invoke('start-remote-server', 8080);
@@ -1451,8 +1562,8 @@
         document.getElementById('remoteStatusDot').classList.add('active');
         document.getElementById('remoteStatusText').textContent = 'Remote control active';
         document.getElementById('remoteUrlBox').style.display = 'block';
-        const ip = result.ips[0] || 'localhost';
-        document.getElementById('remoteUrl').textContent = `http://${ip}:${result.port}`;
+        document.getElementById('remoteUrl').textContent = result.url;
+        document.getElementById('remoteQrCode').src = result.qrCode;
       }
     });
 
@@ -1489,28 +1600,39 @@
       }
     });
 
-    // Draggable font size input
+    // Draggable font size input (with threshold so arrows still work)
     (function() {
+      let isMouseDown = false;
       let isDragging = false;
       let startX = 0;
       let startValue = 0;
+      const dragThreshold = 5; // pixels before drag starts
 
       fontSizeInput.addEventListener('mousedown', (e) => {
-        isDragging = true;
+        isMouseDown = true;
+        isDragging = false;
         startX = e.clientX;
         startValue = parseInt(fontSizeInput.value);
-        e.preventDefault();
       });
 
       document.addEventListener('mousemove', (e) => {
-        if (!isDragging) return;
+        if (!isMouseDown) return;
         const delta = e.clientX - startX;
-        const newValue = Math.min(200, Math.max(24, startValue + Math.round(delta / 2)));
-        fontSizeInput.value = newValue;
-        sendSettings();
+
+        // Only start dragging after threshold
+        if (!isDragging && Math.abs(delta) > dragThreshold) {
+          isDragging = true;
+        }
+
+        if (isDragging) {
+          const newValue = Math.min(200, Math.max(24, startValue + Math.round(delta / 2)));
+          fontSizeInput.value = newValue;
+          sendSettings();
+        }
       });
 
       document.addEventListener('mouseup', () => {
+        isMouseDown = false;
         isDragging = false;
       });
     })();
@@ -1518,11 +1640,18 @@
     // Scroll in monitor viewport to change position
     monitorContainer.addEventListener('wheel', (e) => {
       e.preventDefault();
-      // Calculate scroll amount (normalize for different scroll speeds)
-      const scrollAmount = e.deltaY > 0 ? 1 : -1;
-      // Smaller increments for finer control
-      const increment = 0.5;
-      const newPosition = Math.min(100, Math.max(0, parseFloat(positionSlider.value) + (scrollAmount * increment)));
+      e.stopPropagation();
+
+      // Skip if no actual scroll movement
+      if (e.deltaY === 0) return;
+
+      // Use actual deltaY for smoother scrolling, normalize for trackpad vs mouse
+      // Positive deltaY = scroll down = increase position (later in script)
+      // Negative deltaY = scroll up = decrease position (earlier in script)
+      const sensitivity = 0.1;
+      const delta = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY) * sensitivity, 2);
+      const currentPos = parseFloat(positionSlider.value) || 0;
+      const newPosition = Math.min(100, Math.max(0, currentPos + delta));
 
       positionSlider.value = newPosition;
       positionValue.textContent = Math.round(newPosition) + '%';
@@ -1535,7 +1664,7 @@
       monitorContainer.scrollTimeout = setTimeout(() => {
         sendPlaybackState(true);
       }, 50);
-    });
+    }, { passive: false });
 
     // Initial
     sendSettings();
