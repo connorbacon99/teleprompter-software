@@ -185,9 +185,10 @@
       overflow: hidden;
     }
 
-    /* This is a clone of the teleprompter - renders at full size, then scaled via CSS zoom */
+    /* This is a clone of the teleprompter - renders at teleprompter size, then scaled */
     .monitor-preview {
       position: relative;
+      /* width/height set dynamically by JS to match teleprompter display */
       width: 1920px;
       height: 1080px;
       background: #000;
@@ -896,6 +897,7 @@
     let cueMarkers = [];
     let currentProjectPath = null;
     let monitorPosition = 0;
+    let teleprompterDimensions = { width: 1920, height: 1080 }; // Updated when teleprompter opens
 
     // View switching
     viewEditorBtn.addEventListener('click', () => {
@@ -918,9 +920,14 @@
     function updateMonitorScale() {
       const containerWidth = monitorContainer.clientWidth;
       const containerHeight = monitorContainer.clientHeight;
-      // The monitor preview is 1920x1080, scale it to fit
-      const scaleX = containerWidth / 1920;
-      const scaleY = containerHeight / 1080;
+
+      // Set monitor preview to match teleprompter dimensions
+      monitorPreview.style.width = teleprompterDimensions.width + 'px';
+      monitorPreview.style.height = teleprompterDimensions.height + 'px';
+
+      // Scale to fit the container
+      const scaleX = containerWidth / teleprompterDimensions.width;
+      const scaleY = containerHeight / teleprompterDimensions.height;
       const scale = Math.min(scaleX, scaleY);
 
       // Include mirror/flip from current settings
@@ -950,8 +957,8 @@
     // Calculate and apply position based on percentage (normalized)
     function applyMonitorPosition(percent) {
       // Calculate position the same way teleprompter does
-      // but using our fixed 1080 height
-      const containerHeight = 1080;
+      // using the actual teleprompter height for accurate sync
+      const containerHeight = teleprompterDimensions.height;
       const textHeight = monitorScriptWrapper.scrollHeight;
       const startY = containerHeight * 0.5;
       const endY = -textHeight + (containerHeight * 0.5);
@@ -982,9 +989,16 @@
     });
 
     // Initialize monitor when teleprompter opens
-    ipcRenderer.on('teleprompter-opened', () => {
+    ipcRenderer.on('teleprompter-opened', (event, dimensions) => {
+      // Store teleprompter display dimensions for accurate scaling
+      if (dimensions) {
+        teleprompterDimensions = dimensions;
+        console.log('Teleprompter dimensions:', dimensions.width, 'x', dimensions.height);
+      }
       updateMonitorText();
       updateMonitorScale();
+      // Initialize position at start
+      applyMonitorPosition(0);
     });
 
     // Handle window resize

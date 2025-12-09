@@ -77,10 +77,13 @@ function createTeleprompterWindow(displayId) {
 
   teleprompterWindow.loadFile(path.join(__dirname, 'teleprompter.html'));
 
-  // Notify operator when teleprompter is ready
+  // Notify operator when teleprompter is ready with display dimensions
   teleprompterWindow.webContents.on('did-finish-load', () => {
     if (operatorWindow) {
-      operatorWindow.webContents.send('teleprompter-opened');
+      operatorWindow.webContents.send('teleprompter-opened', {
+        width: width,
+        height: height
+      });
     }
   });
 
