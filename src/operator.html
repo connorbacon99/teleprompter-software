@@ -1164,7 +1164,7 @@
           </div>
           <!-- Whisper Info -->
           <div style="font-size: 10px; color: var(--text-tertiary); margin-bottom: 8px;">
-            Uses Whisper AI - runs locally, free. First use downloads ~40MB model.
+            Uses Whisper AI - runs locally, free. First use downloads ~280MB model.
           </div>
           <!-- Whisper Model Status -->
           <div id="whisperModelStatus" style="display: none; margin-bottom: 8px; padding: 8px; background: var(--bg-tertiary); border-radius: var(--radius-sm); font-size: 11px;">
@@ -2672,7 +2672,7 @@
         console.log('Whisper: Using cache directory:', cacheDir);
 
         // Check if model is already cached (look for the config.json file)
-        const modelName = 'whisper-tiny.en';
+        const modelName = 'whisper-base.en';
         const modelCachePath = path.join(cacheDir, 'Xenova', modelName);
         const modelConfigPath = path.join(modelCachePath, 'config.json');
         const isModelCached = fs.existsSync(modelConfigPath);
@@ -2684,7 +2684,7 @@
           whisperModelStatusText.textContent = 'Loading model...';
           whisperModelProgressBar.style.width = '50%';
         } else {
-          whisperModelStatusText.textContent = 'Downloading model (~40MB)...';
+          whisperModelStatusText.textContent = 'Downloading model (~280MB)...';
         }
 
         whisperTranscriber = await pipeline(
