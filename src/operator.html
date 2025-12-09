@@ -196,6 +196,13 @@
       overflow: hidden;
     }
 
+    /* Inner container for mirror/flip - uses center origin so flip works correctly */
+    .monitor-flip-container {
+      position: absolute;
+      inset: 0;
+      transform-origin: center center;
+    }
+
     .monitor-preview .gradient-top {
       position: absolute;
       top: 0; left: 0; right: 0;
@@ -641,15 +648,18 @@
         </div>
         <div class="script-monitor" id="monitorView">
           <div class="monitor-container" id="monitorContainer">
-            <!-- Scaled clone of teleprompter - renders at 1920x1080 then scaled down -->
+            <!-- Scaled clone of teleprompter - renders at teleprompter size then scaled down -->
             <div class="monitor-preview-frame">
               <div class="monitor-preview" id="monitorPreview">
-                <div class="gradient-top"></div>
-                <div class="reading-guide"></div>
-                <div class="script-wrapper" id="monitorScriptWrapper">
-                  <div class="script-text" id="monitorScriptText">Waiting for script...</div>
+                <!-- Inner container for mirror/flip transforms (separate from scale) -->
+                <div class="monitor-flip-container" id="monitorFlipContainer">
+                  <div class="gradient-top"></div>
+                  <div class="reading-guide"></div>
+                  <div class="script-wrapper" id="monitorScriptWrapper">
+                    <div class="script-text" id="monitorScriptText">Waiting for script...</div>
+                  </div>
+                  <div class="gradient-bottom"></div>
                 </div>
-                <div class="gradient-bottom"></div>
               </div>
             </div>
           </div>
@@ -883,6 +893,7 @@
     // Monitor elements
     const monitorContainer = document.getElementById('monitorContainer');
     const monitorPreview = document.getElementById('monitorPreview');
+    const monitorFlipContainer = document.getElementById('monitorFlipContainer');
     const monitorScriptWrapper = document.getElementById('monitorScriptWrapper');
     const monitorScriptText = document.getElementById('monitorScriptText');
     const monitorProgressBar = document.getElementById('monitorProgressBar');
@@ -927,21 +938,22 @@
       monitorPreview.style.width = teleprompterDimensions.width + 'px';
       monitorPreview.style.height = teleprompterDimensions.height + 'px';
 
-      // Scale to fit the container
+      // Scale to fit the container (scale only, no flip here)
       const scaleX = containerWidth / teleprompterDimensions.width;
       const scaleY = containerHeight / teleprompterDimensions.height;
       const scale = Math.min(scaleX, scaleY);
+      monitorPreview.style.transform = `scale(${scale})`;
 
-      // Include mirror/flip from current settings
+      // Apply mirror/flip to the inner container (with center transform-origin)
       let flipTransform = '';
       if (mirrorCheckbox.checked && flipCheckbox.checked) {
-        flipTransform = ' scale(-1, -1)';
+        flipTransform = 'scale(-1, -1)';
       } else if (mirrorCheckbox.checked) {
-        flipTransform = ' scaleX(-1)';
+        flipTransform = 'scaleX(-1)';
       } else if (flipCheckbox.checked) {
-        flipTransform = ' scaleY(-1)';
+        flipTransform = 'scaleY(-1)';
       }
-      monitorPreview.style.transform = `scale(${scale})${flipTransform}`;
+      monitorFlipContainer.style.transform = flipTransform;
 
       // Also sync current text and settings
       updateMonitorText();
