@@ -1,0 +1,1459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teleprompter</title>
+  <style>
+    :root {
+      --bg-primary: #09090b;
+      --bg-secondary: #18181b;
+      --bg-tertiary: #27272a;
+      --bg-hover: #3f3f46;
+      --border: #27272a;
+      --border-subtle: #1f1f23;
+      --text-primary: #fafafa;
+      --text-secondary: #a1a1aa;
+      --text-tertiary: #71717a;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --accent-subtle: rgba(59, 130, 246, 0.1);
+      --success: #22c55e;
+      --success-hover: #16a34a;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+      --transition: 150ms ease;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Header */
+    .header {
+      background: var(--bg-secondary);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid var(--border);
+      -webkit-app-region: drag;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-right: 4px;
+    }
+
+    .logo-icon {
+      width: 26px;
+      height: 26px;
+      background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-icon svg { width: 14px; height: 14px; fill: white; }
+    .logo-text { font-size: 14px; font-weight: 600; letter-spacing: -0.3px; }
+    .header-divider { width: 1px; height: 20px; background: var(--border); }
+
+    .btn {
+      -webkit-app-region: no-drag;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 6px 12px;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all var(--transition);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .btn:hover { background: var(--bg-hover); border-color: var(--bg-hover); }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: white; }
+    .btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .btn.success { background: var(--success); border-color: var(--success); color: white; }
+    .btn.success:hover { background: var(--success-hover); border-color: var(--success-hover); }
+    .btn.ghost { background: transparent; border-color: transparent; }
+    .btn.ghost:hover { background: var(--bg-tertiary); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn svg { width: 12px; height: 12px; fill: currentColor; }
+
+    .file-indicator {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-tertiary);
+      font-size: 12px;
+    }
+
+    .file-indicator .dot { width: 6px; height: 6px; background: var(--success); border-radius: 50%; }
+
+    /* Main Layout */
+    .main { display: flex; flex: 1; overflow: hidden; }
+
+    /* Script Panel */
+    .script-panel { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+    .script-header {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .script-header h2 {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .script-meta { display: flex; gap: 16px; align-items: center; }
+    .char-count { font-size: 11px; color: var(--text-tertiary); }
+
+    /* View toggle buttons */
+    .view-toggle { display: flex; gap: 4px; }
+    .view-toggle .btn { padding: 4px 10px; font-size: 11px; }
+    .view-toggle .btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+    .script-content { flex: 1; display: flex; overflow: hidden; }
+
+    .script-editor { flex: 1; padding: 16px; overflow: hidden; display: none; }
+    .script-editor.active { display: flex; }
+
+    .script-editor textarea {
+      width: 100%;
+      height: 100%;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      color: var(--text-primary);
+      font-size: 15px;
+      line-height: 1.8;
+      padding: 20px;
+      resize: none;
+      font-family: inherit;
+      transition: border-color var(--transition);
+    }
+
+    .script-editor textarea:focus { outline: none; border-color: var(--accent); }
+    .script-editor textarea::placeholder { color: var(--text-tertiary); }
+
+    /* Live Monitor View - scaled clone of teleprompter */
+    .script-monitor { flex: 1; padding: 16px; overflow: hidden; display: none; flex-direction: column; }
+    .script-monitor.active { display: flex; }
+
+    .monitor-container {
+      flex: 1;
+      background: #000;
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* The preview frame clips the scaled content */
+    .monitor-preview-frame {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+    }
+
+    /* This is a clone of the teleprompter - renders at full size, then scaled via CSS zoom */
+    .monitor-preview {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      background: #000;
+      transform-origin: 0 0;
+      overflow: hidden;
+    }
+
+    .monitor-preview .gradient-top {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 20%;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+      pointer-events: none;
+      z-index: 50;
+    }
+
+    .monitor-preview .reading-guide {
+      position: absolute;
+      top: 50%;
+      left: 0; right: 0;
+      height: 2px;
+      background: rgba(59, 130, 246, 0.4);
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    .monitor-preview .gradient-bottom {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 20%;
+      background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+      pointer-events: none;
+      z-index: 50;
+    }
+
+    .monitor-preview .script-wrapper {
+      position: absolute;
+      width: 100%;
+      padding: 10% 15%;
+    }
+
+    .monitor-preview .script-text {
+      font-size: 72px;
+      line-height: 1.5;
+      text-align: center;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      color: #fff;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    /* Progress bar */
+    .monitor-progress {
+      height: 4px;
+      background: var(--bg-tertiary);
+      border-radius: 2px;
+      margin-top: 12px;
+      overflow: hidden;
+    }
+
+    .monitor-progress-bar {
+      height: 100%;
+      background: var(--accent);
+      width: 0%;
+      transition: width 0.1s linear;
+    }
+
+    .monitor-status {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--text-tertiary);
+    }
+
+    .monitor-status .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .monitor-status .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-tertiary);
+    }
+
+    .monitor-status .status-dot.playing {
+      background: var(--success);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Control Panel */
+    .control-panel {
+      width: 300px;
+      background: var(--bg-secondary);
+      border-left: 1px solid var(--border);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+    }
+
+    .control-section {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 14px;
+    }
+
+    .section-header { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+    .section-header svg { width: 12px; height: 12px; fill: var(--text-tertiary); }
+
+    .section-header h3 {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    /* Select */
+    .select-wrapper { position: relative; margin-bottom: 10px; }
+
+    .select-wrapper select {
+      width: 100%;
+      padding: 8px 10px;
+      padding-right: 30px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      font-size: 12px;
+      cursor: pointer;
+      appearance: none;
+      transition: border-color var(--transition);
+    }
+
+    .select-wrapper select:focus { outline: none; border-color: var(--accent); }
+
+    .select-wrapper::after {
+      content: '';
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0;
+      height: 0;
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-top: 5px solid var(--text-tertiary);
+      pointer-events: none;
+    }
+
+    .button-row { display: flex; gap: 6px; }
+    .button-row .btn { flex: 1; justify-content: center; }
+
+    /* Playback */
+    .playback-main { display: grid; grid-template-columns: 1fr auto; gap: 6px; margin-bottom: 12px; }
+    .btn-play { padding: 12px 16px; font-size: 13px; }
+    .btn-reset { padding: 12px 14px; }
+
+    /* Slider */
+    .slider-group { margin-bottom: 12px; }
+    .slider-group:last-child { margin-bottom: 0; }
+
+    .slider-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .slider-label span { font-size: 11px; color: var(--text-secondary); }
+
+    .slider-value {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      background: var(--bg-tertiary);
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--bg-tertiary);
+      outline: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--text-primary);
+      cursor: pointer;
+      transition: transform var(--transition);
+      box-shadow: var(--shadow-sm);
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.1); }
+
+    /* Position buttons */
+    .position-actions { display: flex; gap: 6px; margin-top: 10px; }
+    .position-actions .btn { flex: 1; justify-content: center; padding: 6px; font-size: 11px; }
+
+    /* Style Controls */
+    .style-grid { display: grid; gap: 10px; }
+
+    .style-row { display: flex; align-items: center; justify-content: space-between; }
+    .style-row label { font-size: 12px; color: var(--text-secondary); }
+
+    .style-row input[type="number"] {
+      width: 64px;
+      padding: 6px 8px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .style-row input[type="number"]:focus { outline: none; border-color: var(--accent); }
+
+    .color-input-wrapper { position: relative; width: 64px; height: 30px; }
+
+    .color-input-wrapper input[type="color"] {
+      width: 100%;
+      height: 100%;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      padding: 2px;
+      background: var(--bg-secondary);
+    }
+
+    .color-input-wrapper input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+    .color-input-wrapper input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
+
+    /* Toggle */
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; }
+    .toggle-row label { font-size: 12px; color: var(--text-secondary); cursor: pointer; }
+
+    .toggle { position: relative; width: 40px; height: 22px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background: var(--bg-tertiary);
+      border-radius: 11px;
+      transition: all var(--transition);
+    }
+
+    .toggle-slider::before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background: var(--text-primary);
+      border-radius: 50%;
+      transition: all var(--transition);
+    }
+
+    .toggle input:checked + .toggle-slider { background: var(--accent); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
+
+    /* Countdown */
+    .countdown-row { display: flex; align-items: center; gap: 8px; }
+    .countdown-row input[type="number"] { width: 50px; }
+
+    /* Cue Markers */
+    .cue-list { max-height: 150px; overflow-y: auto; margin-top: 10px; }
+
+    .cue-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: var(--bg-secondary);
+      border-radius: var(--radius-md);
+      margin-bottom: 6px;
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+
+    .cue-item:hover { background: var(--bg-tertiary); }
+
+    .cue-item .cue-name {
+      flex: 1;
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cue-item .cue-delete {
+      opacity: 0;
+      color: var(--danger);
+      cursor: pointer;
+      transition: opacity var(--transition);
+    }
+
+    .cue-item:hover .cue-delete { opacity: 1; }
+    .no-cues { font-size: 11px; color: var(--text-tertiary); text-align: center; padding: 16px; }
+
+    /* Remote Control */
+    .remote-status { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .remote-status .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
+    .remote-status .status-dot.active { background: var(--success); }
+    .remote-status span { font-size: 12px; color: var(--text-secondary); }
+
+    .remote-url {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 10px;
+      margin-top: 10px;
+    }
+
+    .remote-url-label { font-size: 10px; color: var(--text-tertiary); margin-bottom: 4px; }
+
+    .remote-url-text {
+      font-size: 13px;
+      font-family: monospace;
+      color: var(--accent);
+      word-break: break-all;
+    }
+
+    /* Keyboard hints */
+    .keyboard-hints {
+      margin-top: auto;
+      padding: 10px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+    }
+
+    .keyboard-hints h4 {
+      font-size: 9px;
+      font-weight: 600;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 8px;
+    }
+
+    .hint-row { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; }
+    .hint-row span { font-size: 10px; color: var(--text-tertiary); }
+
+    .kbd {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-size: 9px;
+      font-family: inherit;
+      color: var(--text-secondary);
+    }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+
+    .tab {
+      flex: 1;
+      padding: 8px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      color: var(--text-tertiary);
+      font-size: 11px;
+      cursor: pointer;
+      transition: all var(--transition);
+      text-align: center;
+    }
+
+    .tab:hover { background: var(--bg-tertiary); color: var(--text-secondary); }
+    .tab.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
+      </div>
+      <span class="logo-text">Teleprompter</span>
+    </div>
+
+    <div class="header-divider"></div>
+
+    <button class="btn" id="openFileBtn">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/></svg>
+      Open
+    </button>
+    <button class="btn ghost" id="newScriptBtn">New</button>
+
+    <div class="header-divider"></div>
+
+    <button class="btn" id="saveProjectBtn">
+      <svg viewBox="0 0 24 24"><path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4z"/></svg>
+      Save Project
+    </button>
+    <button class="btn" id="loadProjectBtn">Load Project</button>
+
+    <div class="header-divider"></div>
+
+    <button class="btn primary" id="sendScriptBtn">
+      <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      Send to Display
+    </button>
+
+    <div class="file-indicator">
+      <span class="dot"></span>
+      <span id="fileName">No file loaded</span>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="script-panel">
+      <div class="script-header">
+        <h2>Script</h2>
+        <div class="script-meta">
+          <div class="view-toggle">
+            <button class="btn active" id="viewEditorBtn">Editor</button>
+            <button class="btn" id="viewMonitorBtn">Monitor</button>
+          </div>
+          <span class="char-count" id="charCount">0 characters</span>
+        </div>
+      </div>
+      <div class="script-content">
+        <div class="script-editor active" id="editorView">
+          <textarea id="scriptText" placeholder="Start typing your script here, or open a Word document..."></textarea>
+        </div>
+        <div class="script-monitor" id="monitorView">
+          <div class="monitor-container" id="monitorContainer">
+            <!-- Scaled clone of teleprompter - renders at 1920x1080 then scaled down -->
+            <div class="monitor-preview-frame">
+              <div class="monitor-preview" id="monitorPreview">
+                <div class="gradient-top"></div>
+                <div class="reading-guide"></div>
+                <div class="script-wrapper" id="monitorScriptWrapper">
+                  <div class="script-text" id="monitorScriptText">Waiting for script...</div>
+                </div>
+                <div class="gradient-bottom"></div>
+              </div>
+            </div>
+          </div>
+          <div class="monitor-progress">
+            <div class="monitor-progress-bar" id="monitorProgressBar"></div>
+          </div>
+          <div class="monitor-status">
+            <div class="status-badge">
+              <div class="status-dot" id="monitorStatusDot"></div>
+              <span id="monitorStatusText">Ready</span>
+            </div>
+            <span id="monitorPercent">0%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="control-panel">
+      <!-- Display -->
+      <div class="control-section">
+        <div class="section-header">
+          <svg viewBox="0 0 24 24"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg>
+          <h3>Display Output</h3>
+        </div>
+        <div class="select-wrapper" style="display: flex; gap: 6px;">
+          <select id="displaySelect" style="flex: 1;">
+            <option value="">Select display...</option>
+          </select>
+          <button class="btn" id="refreshDisplaysBtn" title="Refresh displays" style="padding: 8px 10px;">
+            <svg viewBox="0 0 24 24" style="width: 14px; height: 14px;"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+          </button>
+        </div>
+        <div class="button-row">
+          <button class="btn success" id="openDisplayBtn">Open Display</button>
+          <button class="btn" id="closeDisplayBtn">Close</button>
+        </div>
+      </div>
+
+      <!-- Playback -->
+      <div class="control-section">
+        <div class="section-header">
+          <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          <h3>Playback</h3>
+        </div>
+        <div class="playback-main">
+          <button class="btn primary btn-play" id="playPauseBtn">
+            <svg viewBox="0 0 24 24" id="playIcon"><path d="M8 5v14l11-7z"/></svg>
+            <span id="playText">Play</span>
+          </button>
+          <button class="btn btn-reset" id="stopBtn">
+            <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+          </button>
+        </div>
+
+        <div class="toggle-row">
+          <label for="countdownCheckbox">Countdown before start</label>
+          <label class="toggle">
+            <input type="checkbox" id="countdownCheckbox" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="countdown-row" id="countdownRow">
+          <label style="font-size: 11px; color: var(--text-tertiary);">Seconds:</label>
+          <input type="number" id="countdownSeconds" value="3" min="1" max="10">
+        </div>
+
+        <div class="slider-group" style="margin-top: 12px;">
+          <div class="slider-label">
+            <span>Speed</span>
+            <span class="slider-value" id="speedValue">30</span>
+          </div>
+          <input type="range" id="speedSlider" min="1" max="100" value="30">
+        </div>
+      </div>
+
+      <!-- Position -->
+      <div class="control-section">
+        <div class="section-header">
+          <svg viewBox="0 0 24 24"><path d="M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z"/></svg>
+          <h3>Position</h3>
+        </div>
+        <div class="slider-group">
+          <div class="slider-label">
+            <span>Scroll Position</span>
+            <span class="slider-value" id="positionValue">0%</span>
+          </div>
+          <input type="range" id="positionSlider" min="0" max="100" value="0">
+        </div>
+        <div class="position-actions">
+          <button class="btn" id="jumpStartBtn">Start</button>
+          <button class="btn" id="jumpCursorBtn" title="Jump to cursor position in editor">Cursor</button>
+          <button class="btn" id="jumpEndBtn">End</button>
+        </div>
+        <!-- Find in script -->
+        <div style="margin-top: 10px;">
+          <div style="display: flex; gap: 6px;">
+            <input type="text" id="findTextInput" placeholder="Find text..." style="flex: 1; padding: 6px 8px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-primary); font-size: 12px;">
+            <button class="btn" id="findTextBtn" style="padding: 6px 10px;">Find</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Appearance & Cues Tabs -->
+      <div class="control-section">
+        <div class="tabs">
+          <div class="tab active" data-tab="appearance">Appearance</div>
+          <div class="tab" data-tab="cues">Cue Markers</div>
+          <div class="tab" data-tab="remote">Remote</div>
+        </div>
+
+        <!-- Appearance Tab -->
+        <div class="tab-content active" id="tab-appearance">
+          <div class="style-grid">
+            <div class="style-row">
+              <label>Font</label>
+              <div class="select-wrapper" style="margin: 0; width: 100px;">
+                <select id="fontFamilySelect" style="padding: 6px 8px;">
+                  <option value="Arial">Arial</option>
+                  <option value="Helvetica">Helvetica</option>
+                  <option value="Georgia">Georgia</option>
+                  <option value="Times New Roman">Times</option>
+                  <option value="Verdana">Verdana</option>
+                  <option value="Courier New">Courier</option>
+                </select>
+              </div>
+            </div>
+            <div class="style-row">
+              <label>Font Size</label>
+              <input type="number" id="fontSizeInput" value="72" min="24" max="200">
+            </div>
+            <div class="style-row">
+              <label>Text Color</label>
+              <div class="color-input-wrapper">
+                <input type="color" id="textColorInput" value="#ffffff">
+              </div>
+            </div>
+            <div class="style-row">
+              <label>Background</label>
+              <div class="color-input-wrapper">
+                <input type="color" id="bgColorInput" value="#000000">
+              </div>
+            </div>
+            <div class="toggle-row">
+              <label for="mirrorCheckbox">Mirror (Horizontal)</label>
+              <label class="toggle">
+                <input type="checkbox" id="mirrorCheckbox">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="toggle-row">
+              <label for="flipCheckbox">Flip (Vertical)</label>
+              <label class="toggle">
+                <input type="checkbox" id="flipCheckbox">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cue Markers Tab -->
+        <div class="tab-content" id="tab-cues">
+          <button class="btn" id="addCueBtn" style="width: 100%; justify-content: center; margin-bottom: 10px;">
+            <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            Add Cue at Cursor
+          </button>
+          <div class="cue-list" id="cueList">
+            <div class="no-cues">No cue markers. Add markers to quickly jump to sections.</div>
+          </div>
+        </div>
+
+        <!-- Remote Tab -->
+        <div class="tab-content" id="tab-remote">
+          <div class="remote-status">
+            <div class="status-dot" id="remoteStatusDot"></div>
+            <span id="remoteStatusText">Remote control off</span>
+          </div>
+          <div class="button-row">
+            <button class="btn success" id="startRemoteBtn">Start Server</button>
+            <button class="btn" id="stopRemoteBtn">Stop</button>
+          </div>
+          <div class="remote-url" id="remoteUrlBox" style="display: none;">
+            <div class="remote-url-label">Open this URL on your phone:</div>
+            <div class="remote-url-text" id="remoteUrl"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Keyboard shortcuts -->
+      <div class="keyboard-hints">
+        <h4>Keyboard Shortcuts</h4>
+        <div class="hint-row">
+          <span>Play / Pause</span>
+          <kbd class="kbd">Space</kbd>
+        </div>
+        <div class="hint-row">
+          <span>Speed +/-</span>
+          <kbd class="kbd">↑</kbd> <kbd class="kbd">↓</kbd>
+        </div>
+        <div class="hint-row">
+          <span>Jump Start/End</span>
+          <kbd class="kbd">Home</kbd> <kbd class="kbd">End</kbd>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+
+    // Elements
+    const scriptText = document.getElementById('scriptText');
+    const fileName = document.getElementById('fileName');
+    const charCount = document.getElementById('charCount');
+    const displaySelect = document.getElementById('displaySelect');
+    const speedSlider = document.getElementById('speedSlider');
+    const speedValue = document.getElementById('speedValue');
+    const positionSlider = document.getElementById('positionSlider');
+    const fontFamilySelect = document.getElementById('fontFamilySelect');
+    const fontSizeInput = document.getElementById('fontSizeInput');
+    const textColorInput = document.getElementById('textColorInput');
+    const bgColorInput = document.getElementById('bgColorInput');
+    const mirrorCheckbox = document.getElementById('mirrorCheckbox');
+    const flipCheckbox = document.getElementById('flipCheckbox');
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    const playIcon = document.getElementById('playIcon');
+    const playTextEl = document.getElementById('playText');
+    const countdownCheckbox = document.getElementById('countdownCheckbox');
+    const countdownSeconds = document.getElementById('countdownSeconds');
+    const cueList = document.getElementById('cueList');
+
+    // Monitor elements
+    const monitorContainer = document.getElementById('monitorContainer');
+    const monitorPreview = document.getElementById('monitorPreview');
+    const monitorScriptWrapper = document.getElementById('monitorScriptWrapper');
+    const monitorScriptText = document.getElementById('monitorScriptText');
+    const monitorProgressBar = document.getElementById('monitorProgressBar');
+    const monitorStatusDot = document.getElementById('monitorStatusDot');
+    const monitorStatusText = document.getElementById('monitorStatusText');
+    const monitorPercent = document.getElementById('monitorPercent');
+    const editorView = document.getElementById('editorView');
+    const monitorView = document.getElementById('monitorView');
+    const viewEditorBtn = document.getElementById('viewEditorBtn');
+    const viewMonitorBtn = document.getElementById('viewMonitorBtn');
+
+    let isPlaying = false;
+    let currentDisplayId = null;
+    let cueMarkers = [];
+    let currentProjectPath = null;
+    let monitorPosition = 0;
+
+    // View switching
+    viewEditorBtn.addEventListener('click', () => {
+      viewEditorBtn.classList.add('active');
+      viewMonitorBtn.classList.remove('active');
+      editorView.classList.add('active');
+      monitorView.classList.remove('active');
+    });
+
+    viewMonitorBtn.addEventListener('click', () => {
+      viewMonitorBtn.classList.add('active');
+      viewEditorBtn.classList.remove('active');
+      monitorView.classList.add('active');
+      editorView.classList.remove('active');
+      // Initialize monitor scaling
+      updateMonitorScale();
+    });
+
+    // Scale the monitor preview to fit the container
+    function updateMonitorScale() {
+      const containerWidth = monitorContainer.clientWidth;
+      const containerHeight = monitorContainer.clientHeight;
+      // The monitor preview is 1920x1080, scale it to fit
+      const scaleX = containerWidth / 1920;
+      const scaleY = containerHeight / 1080;
+      const scale = Math.min(scaleX, scaleY);
+
+      // Include mirror/flip from current settings
+      let flipTransform = '';
+      if (mirrorCheckbox.checked && flipCheckbox.checked) {
+        flipTransform = ' scale(-1, -1)';
+      } else if (mirrorCheckbox.checked) {
+        flipTransform = ' scaleX(-1)';
+      } else if (flipCheckbox.checked) {
+        flipTransform = ' scaleY(-1)';
+      }
+      monitorPreview.style.transform = `scale(${scale})${flipTransform}`;
+
+      // Also sync current text and settings
+      updateMonitorText();
+      monitorScriptText.style.fontSize = fontSizeInput.value + 'px';
+      monitorScriptText.style.color = textColorInput.value;
+      monitorScriptText.style.fontFamily = fontFamilySelect.value;
+      monitorPreview.style.background = bgColorInput.value;
+    }
+
+    // Update monitor text content
+    function updateMonitorText() {
+      monitorScriptText.textContent = scriptText.value || 'Waiting for script...';
+    }
+
+    // Calculate and apply position based on percentage (normalized)
+    function applyMonitorPosition(percent) {
+      // Calculate position the same way teleprompter does
+      // but using our fixed 1080 height
+      const containerHeight = 1080;
+      const textHeight = monitorScriptWrapper.scrollHeight;
+      const startY = containerHeight * 0.5;
+      const endY = -textHeight + (containerHeight * 0.5);
+      const range = startY - endY;
+      const position = startY - (range * (percent / 100));
+      monitorScriptWrapper.style.transform = `translateY(${position}px)`;
+    }
+
+    // Update monitor position display (progress bar and percentage)
+    function updateMonitorPosition(positionData) {
+      const percent = positionData.percent || 0;
+      monitorPosition = percent;
+      monitorProgressBar.style.width = `${percent}%`;
+      monitorPercent.textContent = `${Math.round(percent)}%`;
+
+      // Calculate position using the same formula as teleprompter
+      // This ensures sync regardless of teleprompter display resolution
+      applyMonitorPosition(percent);
+    }
+
+    // Receive position updates from teleprompter
+    ipcRenderer.on('monitor-position', (event, positionData) => {
+      updateMonitorPosition(positionData);
+      positionSlider.value = positionData.percent || 0;
+      if (document.getElementById('positionValue')) {
+        document.getElementById('positionValue').textContent = Math.round(positionData.percent || 0) + '%';
+      }
+    });
+
+    // Initialize monitor when teleprompter opens
+    ipcRenderer.on('teleprompter-opened', () => {
+      updateMonitorText();
+      updateMonitorScale();
+    });
+
+    // Handle window resize
+    window.addEventListener('resize', () => {
+      if (monitorView.classList.contains('active')) {
+        updateMonitorScale();
+      }
+    });
+
+    // Update monitor status when playing state changes
+    function updateMonitorStatus() {
+      if (isPlaying) {
+        monitorStatusDot.classList.add('playing');
+        monitorStatusText.textContent = 'Playing';
+      } else {
+        monitorStatusDot.classList.remove('playing');
+        monitorStatusText.textContent = 'Paused';
+      }
+    }
+
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+      });
+    });
+
+    // Load available displays
+    async function loadDisplays() {
+      const displays = await ipcRenderer.invoke('get-displays');
+      displaySelect.innerHTML = '<option value="">Select display...</option>';
+      displays.forEach(d => {
+        const option = document.createElement('option');
+        option.value = d.id;
+        option.textContent = `${d.isPrimary ? 'Primary - ' : ''}${d.width} × ${d.height}`;
+        displaySelect.appendChild(option);
+      });
+    }
+
+    loadDisplays();
+
+    // Refresh displays button
+    document.getElementById('refreshDisplaysBtn').addEventListener('click', () => {
+      loadDisplays();
+    });
+
+    // Character count
+    function updateCharCount() {
+      const count = scriptText.value.length;
+      charCount.textContent = `${count.toLocaleString()} characters`;
+    }
+
+    scriptText.addEventListener('input', updateCharCount);
+
+    // Open file
+    document.getElementById('openFileBtn').addEventListener('click', async () => {
+      const filePath = await ipcRenderer.invoke('open-file-dialog');
+      if (filePath) {
+        const result = await ipcRenderer.invoke('read-file', filePath);
+        if (result.success) {
+          scriptText.value = result.content;
+          fileName.textContent = result.fileName;
+          updateCharCount();
+          cueMarkers = [];
+          renderCueList();
+          sendScript();
+          updateMonitorText();
+          updateMonitorPosition(0);
+        } else {
+          alert('Error reading file: ' + result.error);
+        }
+      }
+    });
+
+    // New script
+    document.getElementById('newScriptBtn').addEventListener('click', () => {
+      scriptText.value = '';
+      fileName.textContent = 'Untitled';
+      cueMarkers = [];
+      currentProjectPath = null;
+      renderCueList();
+      updateCharCount();
+    });
+
+    // Save project
+    document.getElementById('saveProjectBtn').addEventListener('click', async () => {
+      const projectData = {
+        name: fileName.textContent,
+        script: scriptText.value,
+        cueMarkers: cueMarkers,
+        settings: {
+          fontSize: parseInt(fontSizeInput.value),
+          fontFamily: fontFamilySelect.value,
+          textColor: textColorInput.value,
+          bgColor: bgColorInput.value,
+          mirror: mirrorCheckbox.checked,
+          flip: flipCheckbox.checked,
+          speed: parseInt(speedSlider.value),
+          countdownEnabled: countdownCheckbox.checked,
+          countdownSeconds: parseInt(countdownSeconds.value)
+        }
+      };
+
+      const result = await ipcRenderer.invoke('save-project', projectData);
+      if (result.success) {
+        fileName.textContent = result.fileName;
+        currentProjectPath = result.filePath;
+      }
+    });
+
+    // Load project
+    document.getElementById('loadProjectBtn').addEventListener('click', async () => {
+      const result = await ipcRenderer.invoke('load-project');
+      if (result.success) {
+        const data = result.data;
+        scriptText.value = data.script || '';
+        fileName.textContent = result.fileName;
+        cueMarkers = data.cueMarkers || [];
+
+        if (data.settings) {
+          fontSizeInput.value = data.settings.fontSize || 72;
+          fontFamilySelect.value = data.settings.fontFamily || 'Arial';
+          textColorInput.value = data.settings.textColor || '#ffffff';
+          bgColorInput.value = data.settings.bgColor || '#000000';
+          mirrorCheckbox.checked = data.settings.mirror || false;
+          flipCheckbox.checked = data.settings.flip || false;
+          speedSlider.value = data.settings.speed || 30;
+          speedValue.textContent = speedSlider.value;
+          countdownCheckbox.checked = data.settings.countdownEnabled !== false;
+          countdownSeconds.value = data.settings.countdownSeconds || 3;
+        }
+
+        updateCharCount();
+        renderCueList();
+        sendScript();
+        sendSettings();
+      }
+    });
+
+    // Send script to teleprompter
+    function sendScript() {
+      ipcRenderer.send('send-script', {
+        text: scriptText.value,
+        cueMarkers: cueMarkers
+      });
+    }
+
+    document.getElementById('sendScriptBtn').addEventListener('click', sendScript);
+
+    // Open teleprompter display
+    document.getElementById('openDisplayBtn').addEventListener('click', async () => {
+      const displayId = displaySelect.value ? parseInt(displaySelect.value) : null;
+      currentDisplayId = await ipcRenderer.invoke('open-teleprompter', displayId);
+      setTimeout(() => {
+        sendScript();
+        sendSettings();
+      }, 500);
+    });
+
+    // Close teleprompter display
+    document.getElementById('closeDisplayBtn').addEventListener('click', () => {
+      ipcRenderer.invoke('close-teleprompter');
+    });
+
+    // Playback controls
+    function updatePlayButton() {
+      if (isPlaying) {
+        playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+        playTextEl.textContent = 'Pause';
+        playPauseBtn.classList.remove('primary');
+        playPauseBtn.classList.add('success');
+      } else {
+        playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+        playTextEl.textContent = 'Play';
+        playPauseBtn.classList.remove('success');
+        playPauseBtn.classList.add('primary');
+      }
+      updateMonitorStatus();
+    }
+
+    playPauseBtn.addEventListener('click', () => {
+      if (!isPlaying && countdownCheckbox.checked) {
+        // Start countdown
+        ipcRenderer.send('start-countdown', parseInt(countdownSeconds.value));
+        isPlaying = true;
+        updatePlayButton();
+      } else {
+        isPlaying = !isPlaying;
+        updatePlayButton();
+        sendPlaybackState();
+      }
+    });
+
+    // Listen for countdown complete
+    ipcRenderer.on('countdown-complete', () => {
+      isPlaying = true;
+      updatePlayButton();
+    });
+
+    // Listen for state updates from remote
+    ipcRenderer.on('state-update', (event, state) => {
+      if (state.isPlaying !== undefined && state.isPlaying !== isPlaying) {
+        isPlaying = state.isPlaying;
+        updatePlayButton();
+      }
+      if (state.speed !== undefined) {
+        speedSlider.value = state.speed;
+        speedValue.textContent = state.speed;
+      }
+    });
+
+    document.getElementById('stopBtn').addEventListener('click', () => {
+      isPlaying = false;
+      updatePlayButton();
+      positionSlider.value = 0;
+      ipcRenderer.send('playback-control', {
+        isPlaying: false,
+        speed: parseInt(speedSlider.value),
+        position: 0,
+        reset: true
+      });
+    });
+
+    function sendPlaybackState(includePosition = false) {
+      const state = {
+        isPlaying: isPlaying,
+        speed: parseInt(speedSlider.value)
+      };
+      if (includePosition) {
+        state.position = parseInt(positionSlider.value);
+      }
+      ipcRenderer.send('playback-control', state);
+    }
+
+    // Speed control - don't include position to avoid jumping
+    speedSlider.addEventListener('input', () => {
+      speedValue.textContent = speedSlider.value;
+      sendPlaybackState(false);
+    });
+
+    // Position control - include position
+    positionSlider.addEventListener('input', () => sendPlaybackState(true));
+
+    const positionValue = document.getElementById('positionValue');
+    const findTextInput = document.getElementById('findTextInput');
+
+    // Update position display
+    positionSlider.addEventListener('input', () => {
+      positionValue.textContent = positionSlider.value + '%';
+    });
+
+    document.getElementById('jumpStartBtn').addEventListener('click', () => {
+      positionSlider.value = 0;
+      positionValue.textContent = '0%';
+      sendPlaybackState(true);
+    });
+
+    document.getElementById('jumpEndBtn').addEventListener('click', () => {
+      positionSlider.value = 100;
+      positionValue.textContent = '100%';
+      sendPlaybackState(true);
+    });
+
+    // Jump to cursor position in editor
+    document.getElementById('jumpCursorBtn').addEventListener('click', () => {
+      const cursorPos = scriptText.selectionStart;
+      const totalChars = scriptText.value.length;
+      if (totalChars > 0) {
+        const percent = Math.round((cursorPos / totalChars) * 100);
+        positionSlider.value = percent;
+        positionValue.textContent = percent + '%';
+        sendPlaybackState(true);
+      }
+    });
+
+    // Find text and jump to position
+    document.getElementById('findTextBtn').addEventListener('click', findAndJump);
+    findTextInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') findAndJump();
+    });
+
+    let lastFindIndex = 0;
+    function findAndJump() {
+      const searchText = findTextInput.value.toLowerCase();
+      if (!searchText) return;
+
+      const scriptContent = scriptText.value.toLowerCase();
+      let index = scriptContent.indexOf(searchText, lastFindIndex + 1);
+
+      // Wrap around if not found after current position
+      if (index === -1) {
+        index = scriptContent.indexOf(searchText);
+      }
+
+      if (index !== -1) {
+        lastFindIndex = index;
+        const totalChars = scriptText.value.length;
+        const percent = Math.round((index / totalChars) * 100);
+
+        // Update position slider and teleprompter
+        positionSlider.value = percent;
+        positionValue.textContent = percent + '%';
+        sendPlaybackState(true);
+
+        // Also highlight in editor
+        scriptText.focus();
+        scriptText.setSelectionRange(index, index + searchText.length);
+
+        // Switch to editor view if in monitor
+        viewEditorBtn.click();
+      } else {
+        lastFindIndex = 0;
+      }
+    }
+
+    // Style controls
+    function sendSettings() {
+      const settings = {
+        fontSize: parseInt(fontSizeInput.value),
+        fontFamily: fontFamilySelect.value,
+        textColor: textColorInput.value,
+        bgColor: bgColorInput.value,
+        mirror: mirrorCheckbox.checked,
+        flip: flipCheckbox.checked
+      };
+      ipcRenderer.send('update-settings', settings);
+      // Also sync settings to the monitor preview
+      updateMonitorSettings(settings);
+    }
+
+    // Update monitor preview settings to match teleprompter
+    function updateMonitorSettings(settings) {
+      // Just call updateMonitorScale which handles all settings
+      updateMonitorScale();
+    }
+
+    fontFamilySelect.addEventListener('change', sendSettings);
+    fontSizeInput.addEventListener('change', sendSettings);
+    textColorInput.addEventListener('change', sendSettings);
+    bgColorInput.addEventListener('change', sendSettings);
+    mirrorCheckbox.addEventListener('change', sendSettings);
+    flipCheckbox.addEventListener('change', sendSettings);
+
+
+    // Script text change
+    scriptText.addEventListener('input', () => {
+      clearTimeout(scriptText.sendTimeout);
+      scriptText.sendTimeout = setTimeout(() => {
+        sendScript();
+        updateMonitorText();
+      }, 500);
+    });
+
+    // Cue Markers
+    function renderCueList() {
+      if (cueMarkers.length === 0) {
+        cueList.innerHTML = '<div class="no-cues">No cue markers. Add markers to quickly jump to sections.</div>';
+        return;
+      }
+
+      cueList.innerHTML = cueMarkers.map((cue, i) => `
+        <div class="cue-item" data-index="${i}">
+          <span class="cue-name">${cue.name}</span>
+          <span class="cue-delete" data-index="${i}">✕</span>
+        </div>
+      `).join('');
+
+      // Click to jump
+      cueList.querySelectorAll('.cue-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+          if (e.target.classList.contains('cue-delete')) {
+            const idx = parseInt(e.target.dataset.index);
+            cueMarkers.splice(idx, 1);
+            renderCueList();
+            sendScript();
+          } else {
+            const idx = parseInt(item.dataset.index);
+            const cue = cueMarkers[idx];
+            // Jump to position based on character position
+            const totalChars = scriptText.value.length;
+            const position = (cue.position / totalChars) * 100;
+            positionSlider.value = Math.min(100, Math.max(0, position));
+            sendPlaybackState(true);
+          }
+        });
+      });
+    }
+
+    document.getElementById('addCueBtn').addEventListener('click', () => {
+      const cursorPos = scriptText.selectionStart;
+      const textBefore = scriptText.value.substring(Math.max(0, cursorPos - 30), cursorPos);
+      const textAfter = scriptText.value.substring(cursorPos, cursorPos + 20);
+      const preview = (textBefore + '|' + textAfter).replace(/\n/g, ' ').trim();
+
+      const name = prompt('Enter a name for this cue marker:', `Cue ${cueMarkers.length + 1}`);
+      if (name) {
+        cueMarkers.push({
+          name: name,
+          position: cursorPos,
+          preview: preview
+        });
+        cueMarkers.sort((a, b) => a.position - b.position);
+        renderCueList();
+        sendScript();
+      }
+    });
+
+    // Jump to cue from remote
+    ipcRenderer.on('jump-to-cue', (event, index) => {
+      if (cueMarkers[index]) {
+        const cue = cueMarkers[index];
+        const totalChars = scriptText.value.length;
+        const position = (cue.position / totalChars) * 100;
+        positionSlider.value = Math.min(100, Math.max(0, position));
+        sendPlaybackState(true);
+      }
+    });
+
+    // Remote Control
+    document.getElementById('startRemoteBtn').addEventListener('click', async () => {
+      const result = await ipcRenderer.invoke('start-remote-server', 8080);
+      if (result.success) {
+        document.getElementById('remoteStatusDot').classList.add('active');
+        document.getElementById('remoteStatusText').textContent = 'Remote control active';
+        document.getElementById('remoteUrlBox').style.display = 'block';
+        const ip = result.ips[0] || 'localhost';
+        document.getElementById('remoteUrl').textContent = `http://${ip}:${result.port}`;
+      }
+    });
+
+    document.getElementById('stopRemoteBtn').addEventListener('click', async () => {
+      await ipcRenderer.invoke('stop-remote-server');
+      document.getElementById('remoteStatusDot').classList.remove('active');
+      document.getElementById('remoteStatusText').textContent = 'Remote control off';
+      document.getElementById('remoteUrlBox').style.display = 'none';
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.target === scriptText) return;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        playPauseBtn.click();
+      } else if (e.code === 'ArrowUp') {
+        e.preventDefault();
+        speedSlider.value = Math.min(100, parseInt(speedSlider.value) + 5);
+        speedValue.textContent = speedSlider.value;
+        sendPlaybackState();
+      } else if (e.code === 'ArrowDown') {
+        e.preventDefault();
+        speedSlider.value = Math.max(1, parseInt(speedSlider.value) - 5);
+        speedValue.textContent = speedSlider.value;
+        sendPlaybackState();
+      } else if (e.code === 'Home') {
+        e.preventDefault();
+        document.getElementById('jumpStartBtn').click();
+      } else if (e.code === 'End') {
+        e.preventDefault();
+        document.getElementById('jumpEndBtn').click();
+      }
+    });
+
+    // Initial
+    sendSettings();
+    renderCueList();
+  </script>
+</body>
+</html>
