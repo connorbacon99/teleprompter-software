@@ -1169,7 +1169,7 @@
           <!-- Whisper Model Status -->
           <div id="whisperModelStatus" style="display: none; margin-bottom: 8px; padding: 8px; background: var(--bg-tertiary); border-radius: var(--radius-sm); font-size: 11px;">
             <div style="display: flex; align-items: center; gap: 8px;">
-              <div class="spinner" style="width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+              <div id="whisperModelSpinner" class="spinner" style="width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite;"></div>
               <span id="whisperModelStatusText">Loading Whisper model...</span>
             </div>
             <div id="whisperModelProgress" style="margin-top: 6px; height: 4px; background: var(--bg-secondary); border-radius: 2px; overflow: hidden;">
@@ -2264,6 +2264,7 @@
     const whisperModelStatus = document.getElementById('whisperModelStatus');
     const whisperModelStatusText = document.getElementById('whisperModelStatusText');
     const whisperModelProgressBar = document.getElementById('whisperModelProgressBar');
+    const whisperModelSpinner = document.getElementById('whisperModelSpinner');
 
     let voiceFollowActive = false;
     let voiceFollowPaused = false;
@@ -2646,6 +2647,7 @@
       whisperModelStatus.style.display = 'block';
       whisperModelStatusText.textContent = 'Loading Whisper model...';
       whisperModelProgressBar.style.width = '0%';
+      whisperModelSpinner.style.display = 'block';
 
       try {
         // Use require for Electron compatibility
@@ -2705,6 +2707,7 @@
               } else if (progress.status === 'ready' || progress.status === 'done') {
                 whisperModelStatusText.textContent = 'Model ready!';
                 whisperModelProgressBar.style.width = '100%';
+                whisperModelSpinner.style.display = 'none';
               }
             }
           }
