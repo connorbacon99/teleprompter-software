@@ -290,12 +290,27 @@ teleprompter-software/
 
 ---
 
+### 2025-12-08 - v1.0.0 Release
+- Created first official release v1.0.0 on GitHub
+- Built for both Mac architectures:
+  - Apple Silicon (arm64): `Umbrellaprompter-1.0.0-arm64.dmg`
+  - Intel (x64): `Umbrellaprompter-1.0.0.dmg`
+- Release includes:
+  - DMG installers for both architectures
+  - ZIP files for auto-update functionality
+  - `latest-mac.yml` metadata for update detection
+- Repository: https://github.com/connorbacon99/teleprompter-software
+- Release URL: https://github.com/connorbacon99/teleprompter-software/releases/tag/v1.0.0
+
+---
+
 ## TODO / Upcoming
 
 - [x] Verify macOS version compatibility (Electron 28 supports 10.15+) ✓
 - [x] Add QR code for remote control ✓
 - [x] Modern UI redesign ✓
 - [x] Auto-update from GitHub Releases ✓
+- [x] First release v1.0.0 published ✓
 - [ ] Add estimated read time display
 - [ ] Add script import from Google Docs
 - [ ] Implement script sections/chapters
