@@ -34,8 +34,10 @@
       position: absolute;
       width: 100%;
       padding: 10% 15%;
-      /* No CSS transition - using requestAnimationFrame for smooth scrolling */
+      /* GPU acceleration hints for smooth scrolling */
       will-change: transform;
+      transform: translate3d(0, 0, 0);
+      backface-visibility: hidden;
     }
 
     .script-text {
@@ -232,7 +234,7 @@
       const range = startY - endY;
 
       currentPosition = startY - (range * (percent / 100));
-      scriptWrapper.style.transform = `translateY(${currentPosition}px)`;
+      scriptWrapper.style.transform = `translate3d(0, ${currentPosition}px, 0)`;
     }
 
     // Start scrolling using requestAnimationFrame for smooth, display-synced animation
@@ -285,7 +287,7 @@
           return;
         }
 
-        scriptWrapper.style.transform = `translateY(${currentPosition}px)`;
+        scriptWrapper.style.transform = `translate3d(0, ${currentPosition}px, 0)`;
 
         // Send position update to operator every 5 frames (~12 times per second)
         frameCount++;
@@ -358,7 +360,7 @@
       calculateScrollHeight();
       const containerHeight = container.clientHeight;
       currentPosition = containerHeight * 0.5;
-      scriptWrapper.style.transform = `translateY(${currentPosition}px)`;
+      scriptWrapper.style.transform = `translate3d(0, ${currentPosition}px, 0)`;
     });
 
     // Receive countdown command
@@ -384,7 +386,7 @@
         }
         const containerHeight = container.clientHeight;
         currentPosition = containerHeight * 0.5;
-        scriptWrapper.style.transform = `translateY(${currentPosition}px)`;
+        scriptWrapper.style.transform = `translate3d(0, ${currentPosition}px, 0)`;
         isPlaying = false;
         showStatus('RESET');
         return;
@@ -476,7 +478,7 @@
       const range = startY - endY;
 
       currentPosition = startY - (range * (percent / 100));
-      scriptWrapper.style.transform = `translateY(${currentPosition}px)`;
+      scriptWrapper.style.transform = `translate3d(0, ${currentPosition}px, 0)`;
     }
 
     function runFollowLoop() {
@@ -553,7 +555,7 @@
     setTimeout(() => {
       const containerHeight = container.clientHeight;
       currentPosition = containerHeight * 0.5;
-      scriptWrapper.style.transform = `translateY(${currentPosition}px)`;
+      scriptWrapper.style.transform = `translate3d(0, ${currentPosition}px, 0)`;
     }, 100);
 
     document.addEventListener('contextmenu', e => e.preventDefault());

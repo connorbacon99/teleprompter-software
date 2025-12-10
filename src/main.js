@@ -2,6 +2,8 @@ const { app, BrowserWindow, ipcMain, dialog, screen, session } = require('electr
 const path = require('path');
 const fs = require('fs');
 const mammoth = require('mammoth');
+const JSZip = require('jszip');
+const { Document, Packer, Paragraph, TextRun } = require('docx');
 const http = require('http');
 const os = require('os');
 const QRCode = require('qrcode');
@@ -713,6 +715,11 @@ ipcMain.handle('get-displays', () => {
   }));
 });
 
+// Check if teleprompter is open
+ipcMain.handle('is-teleprompter-open', () => {
+  return teleprompterWindow !== null;
+});
+
 // Open teleprompter on specific display
 ipcMain.handle('open-teleprompter', (event, displayId) => {
   if (teleprompterWindow) {
@@ -799,7 +806,8 @@ ipcMain.handle('open-file-dialog', async () => {
   const result = await dialog.showOpenDialog(operatorWindow, {
     properties: ['openFile'],
     filters: [
-      { name: 'Documents', extensions: ['docx', 'txt', 'rtf'] },
+      { name: 'Documents', extensions: ['docx', 'pptx', 'txt', 'rtf'] },
+      { name: 'PowerPoint', extensions: ['pptx'] },
       { name: 'Word Documents', extensions: ['docx'] },
       { name: 'Text Files', extensions: ['txt'] },
       { name: 'All Files', extensions: ['*'] }
@@ -812,6 +820,49 @@ ipcMain.handle('open-file-dialog', async () => {
 
   return result.filePaths[0];
 });
+
+// Extract speaker notes from PowerPoint file
+async function extractPowerPointNotes(filePath) {
+  const data = fs.readFileSync(filePath);
+  const zip = await JSZip.loadAsync(data);
+
+  // Get all notes slide files
+  const notesFiles = [];
+  zip.forEach((relativePath, file) => {
+    if (relativePath.startsWith('ppt/notesSlides/notesSlide') && relativePath.endsWith('.xml')) {
+      // Extract slide number from filename (notesSlide1.xml -> 1)
+      const match = relativePath.match(/notesSlide(\d+)\.xml$/);
+      if (match) {
+        notesFiles.push({ path: relativePath, slideNum: parseInt(match[1]) });
+      }
+    }
+  });
+
+  // Sort by slide number
+  notesFiles.sort((a, b) => a.slideNum - b.slideNum);
+
+  // Extract text from each notes slide
+  const results = [];
+  for (const noteFile of notesFiles) {
+    const xmlContent = await zip.file(noteFile.path).async('string');
+
+    // Extract all text from <a:t> elements (text elements in OOXML)
+    const textMatches = xmlContent.match(/<a:t>([^<]*)<\/a:t>/g) || [];
+    const texts = textMatches
+      .map(match => match.replace(/<a:t>([^<]*)<\/a:t>/, '$1'))
+      .filter(text => text.trim().length > 0)
+      // Filter out standalone slide numbers (page number placeholders)
+      .filter(text => text.trim() !== String(noteFile.slideNum));
+
+    // Skip slides with no notes
+    const noteText = texts.join(' ').trim();
+    if (noteText) {
+      results.push(`[Slide ${noteFile.slideNum}] ${noteText}`);
+    }
+  }
+
+  return results.join('\n');
+}
 
 // Clean up text from Word documents
 // - Preserve paragraph breaks (double line breaks)
@@ -843,7 +894,10 @@ ipcMain.handle('read-file', async (event, filePath) => {
   try {
     const ext = path.extname(filePath).toLowerCase();
 
-    if (ext === '.docx') {
+    if (ext === '.pptx') {
+      const content = await extractPowerPointNotes(filePath);
+      return { success: true, content, fileName: path.basename(filePath) };
+    } else if (ext === '.docx') {
       const result = await mammoth.extractRawText({ path: filePath });
       const cleanedContent = cleanImportedText(result.value);
       return { success: true, content: cleanedContent, fileName: path.basename(filePath) };
@@ -874,6 +928,40 @@ ipcMain.handle('save-project', async (event, projectData) => {
   try {
     fs.writeFileSync(result.filePath, JSON.stringify(projectData, null, 2));
     return { success: true, filePath: result.filePath, fileName: path.basename(result.filePath) };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Export script to Word document
+ipcMain.handle('export-docx', async (event, scriptText, suggestedName) => {
+  const result = await dialog.showSaveDialog(operatorWindow, {
+    filters: [{ name: 'Word Document', extensions: ['docx'] }],
+    defaultPath: suggestedName || 'Script.docx'
+  });
+
+  if (result.canceled) {
+    return { success: false };
+  }
+
+  try {
+    // Split script into paragraphs and create document
+    const paragraphs = scriptText.split('\n').map(line =>
+      new Paragraph({
+        children: [new TextRun(line)]
+      })
+    );
+
+    const doc = new Document({
+      sections: [{
+        properties: {},
+        children: paragraphs
+      }]
+    });
+
+    const buffer = await Packer.toBuffer(doc);
+    fs.writeFileSync(result.filePath, buffer);
+    return { success: true, filePath: result.filePath };
   } catch (error) {
     return { success: false, error: error.message };
   }

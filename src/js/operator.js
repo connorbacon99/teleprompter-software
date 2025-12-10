@@ -278,6 +278,21 @@
 
     scriptText.addEventListener('input', updateCharCount);
 
+    // Clean up script - remove extra blank lines and bracketed text
+    document.getElementById('cleanUpBtn').addEventListener('click', () => {
+      let cleaned = scriptText.value
+        .replace(/\[.*?\]\s*/g, '') // Remove text in square brackets [like this] and trailing space
+        .split('\n')
+        .map(line => line.trimEnd()) // Remove trailing spaces from each line
+        .join('\n')
+        .replace(/\n{2,}/g, '\n') // Reduce 2+ newlines to 1
+        .trim(); // Trim start and end
+
+      scriptText.value = cleaned;
+      updateCharCount();
+      sendScript();
+    });
+
     // Open file
     document.getElementById('openFileBtn').addEventListener('click', async () => {
       const filePath = await ipcRenderer.invoke('open-file-dialog');
@@ -334,6 +349,15 @@
       }
     });
 
+    // Export to Word document
+    document.getElementById('exportDocxBtn').addEventListener('click', async () => {
+      const suggestedName = fileName.textContent.replace(/\.[^/.]+$/, '') + '.docx';
+      const result = await ipcRenderer.invoke('export-docx', scriptText.value, suggestedName);
+      if (!result.success && result.error) {
+        alert('Error exporting: ' + result.error);
+      }
+    });
+
     // Load project
     document.getElementById('loadProjectBtn').addEventListener('click', async () => {
       const result = await ipcRenderer.invoke('load-project');
@@ -370,8 +394,6 @@
         cueMarkers: cueMarkers
       });
     }
-
-    document.getElementById('sendScriptBtn').addEventListener('click', sendScript);
 
     // Open teleprompter display
     document.getElementById('openDisplayBtn').addEventListener('click', async () => {
@@ -415,10 +437,29 @@
       updateMonitorStatus();
     }
 
-    playPauseBtn.addEventListener('click', () => {
+    playPauseBtn.addEventListener('click', async () => {
       // VOICE FOLLOW MODE: Block play/pause - voice controls everything
       if (voiceFollowActive) {
         return;
+      }
+
+      // When starting playback, auto-switch to monitor view and open display
+      if (!isPlaying) {
+        // Switch to monitor view
+        viewMonitorBtn.classList.add('active');
+        viewEditorBtn.classList.remove('active');
+        monitorView.classList.add('active');
+        editorView.classList.remove('active');
+        updateMonitorScale();
+
+        // Open display only if not already open
+        const isOpen = await ipcRenderer.invoke('is-teleprompter-open');
+        if (!isOpen) {
+          const displayId = displaySelect.value ? parseInt(displaySelect.value) : null;
+          currentDisplayId = await ipcRenderer.invoke('open-teleprompter', displayId);
+          sendScript();
+          sendSettings();
+        }
       }
 
       if (!isPlaying && countdownCheckbox.checked) {
@@ -708,6 +749,63 @@
       showCueModal(`Cue ${cueMarkers.length + 1}`);
     });
 
+    // Edit from monitor view
+    let isMonitorEditing = false;
+    const editFromMonitorBtn = document.getElementById('editFromMonitorBtn');
+
+    editFromMonitorBtn.addEventListener('click', () => {
+      isMonitorEditing = !isMonitorEditing;
+
+      if (isMonitorEditing) {
+        // Enable editing
+        monitorScriptText.contentEditable = 'true';
+        monitorScriptText.style.cursor = 'text';
+        monitorScriptText.style.outline = '2px solid var(--accent-primary)';
+        monitorScriptText.style.borderRadius = '4px';
+        editFromMonitorBtn.classList.add('success');
+        editFromMonitorBtn.innerHTML = '<svg viewBox="0 0 24 24" style="width: 12px; height: 12px;"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Done';
+      } else {
+        // Disable editing and sync back to editor
+        monitorScriptText.contentEditable = 'false';
+        monitorScriptText.style.cursor = '';
+        monitorScriptText.style.outline = '';
+        editFromMonitorBtn.classList.remove('success');
+        editFromMonitorBtn.innerHTML = '<svg viewBox="0 0 24 24" style="width: 12px; height: 12px;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg> Edit';
+
+        // Sync edited content back to editor (extract text from HTML)
+        scriptText.value = monitorScriptText.innerText;
+        updateCharCount();
+        sendScript();
+      }
+    });
+
+    // Selection sync: when selecting in monitor, highlight in editor
+    monitorScriptText.addEventListener('mouseup', () => {
+      if (isMonitorEditing) return; // Don't sync during editing
+
+      const selection = window.getSelection();
+      if (selection.rangeCount > 0 && !selection.isCollapsed) {
+        const selectedText = selection.toString();
+        if (selectedText.trim()) {
+          // Find the selected text in the editor
+          const editorText = scriptText.value;
+          const startIndex = editorText.indexOf(selectedText);
+
+          if (startIndex !== -1) {
+            // Switch to editor view and select the text
+            viewEditorBtn.classList.add('active');
+            viewMonitorBtn.classList.remove('active');
+            editorView.classList.add('active');
+            monitorView.classList.remove('active');
+
+            // Focus and select in editor
+            scriptText.focus();
+            scriptText.setSelectionRange(startIndex, startIndex + selectedText.length);
+          }
+        }
+      }
+    });
+
     cueModal.addEventListener('click', (e) => {
       if (e.target === cueModal) hideCueModal();
     });
@@ -756,7 +854,9 @@
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
+      // Skip shortcuts when typing in text inputs
       if (e.target === scriptText) return;
+      if (e.target.isContentEditable) return; // Skip when editing in monitor
 
       if (e.code === 'Space') {
         e.preventDefault();
@@ -1715,5 +1815,3 @@
         setTimeout(() => startWhisperVoiceFollow(), 100);
       }
     });
-  </script>
-</body>
