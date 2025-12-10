@@ -34,7 +34,8 @@
       position: absolute;
       width: 100%;
       padding: 10% 15%;
-      transition: transform 0.05s linear;
+      /* No CSS transition - using requestAnimationFrame for smooth scrolling */
+      will-change: transform;
     }
 
     .script-text {
@@ -209,9 +210,10 @@
     let isPlaying = false;
     let scrollSpeed = 30;
     let currentPosition = 0;
-    let scrollInterval = null;
+    let scrollAnimationId = null;
     let totalScrollHeight = 0;
     let countdownInterval = null;
+    let lastFrameTime = 0;
 
     // Calculate total scroll distance
     function calculateScrollHeight() {
@@ -233,28 +235,54 @@
       scriptWrapper.style.transform = `translateY(${currentPosition}px)`;
     }
 
-    // Start scrolling
+    // Start scrolling using requestAnimationFrame for smooth, display-synced animation
     function startScrolling() {
-      if (scrollInterval) {
-        clearInterval(scrollInterval);
+      // IMPORTANT: Stop voice follow mode first to prevent conflicts
+      stopFollowMode();
+
+      // Cancel any existing animation
+      if (scrollAnimationId) {
+        cancelAnimationFrame(scrollAnimationId);
+        scrollAnimationId = null;
       }
 
       calculateScrollHeight();
-      const containerHeight = container.clientHeight;
-      const startY = containerHeight * 0.5;
-      const endY = -scriptWrapper.scrollHeight + (containerHeight * 0.5);
-
       let frameCount = 0;
-      scrollInterval = setInterval(() => {
-        if (!isPlaying) return;
+      lastFrameTime = performance.now();
 
-        const pixelsPerFrame = (scrollSpeed / 100) * 4 + 0.5;
-        currentPosition -= pixelsPerFrame;
+      function scrollFrame(currentTime) {
+        if (!isPlaying) {
+          scrollAnimationId = null;
+          return;
+        }
+
+        // Calculate delta time for consistent speed regardless of frame rate
+        const deltaTime = currentTime - lastFrameTime;
+        lastFrameTime = currentTime;
+
+        // Skip if delta is too large (e.g., tab was inactive)
+        if (deltaTime > 100) {
+          scrollAnimationId = requestAnimationFrame(scrollFrame);
+          return;
+        }
+
+        const containerHeight = container.clientHeight;
+        const startY = containerHeight * 0.5;
+        const endY = -scriptWrapper.scrollHeight + (containerHeight * 0.5);
+
+        // Calculate pixels per millisecond based on speed (normalized to ~60fps baseline)
+        // At speed 50: ~2.5 pixels per frame at 60fps = ~0.15 px/ms
+        const pixelsPerMs = ((scrollSpeed / 100) * 4 + 0.5) / 16.67;
+        const pixelsThisFrame = pixelsPerMs * deltaTime;
+
+        currentPosition -= pixelsThisFrame;
 
         if (currentPosition < endY) {
           currentPosition = endY;
           isPlaying = false;
           showStatus('END');
+          scrollAnimationId = null;
+          return;
         }
 
         scriptWrapper.style.transform = `translateY(${currentPosition}px)`;
@@ -264,7 +292,6 @@
         if (frameCount % 5 === 0) {
           const range = startY - endY;
           const percent = ((startY - currentPosition) / range) * 100;
-          // Send both percentage and the actual transform for perfect sync
           ipcRenderer.send('position-update', {
             percent: Math.min(100, Math.max(0, percent)),
             transform: currentPosition,
@@ -272,7 +299,13 @@
             scrollHeight: scriptWrapper.scrollHeight
           });
         }
-      }, 16);
+
+        // Continue the animation loop
+        scrollAnimationId = requestAnimationFrame(scrollFrame);
+      }
+
+      // Start the animation loop
+      scrollAnimationId = requestAnimationFrame(scrollFrame);
     }
 
     // Show status briefly
@@ -344,6 +377,11 @@
     ipcRenderer.on('playback-update', (event, state) => {
       if (state.reset) {
         cancelCountdown();
+        // Cancel any running animation
+        if (scrollAnimationId) {
+          cancelAnimationFrame(scrollAnimationId);
+          scrollAnimationId = null;
+        }
         const containerHeight = container.clientHeight;
         currentPosition = containerHeight * 0.5;
         scriptWrapper.style.transform = `translateY(${currentPosition}px)`;
@@ -363,6 +401,11 @@
 
         if (!isPlaying) {
           cancelCountdown();
+          // Cancel animation when pausing
+          if (scrollAnimationId) {
+            cancelAnimationFrame(scrollAnimationId);
+            scrollAnimationId = null;
+          }
         }
 
         showStatus(isPlaying ? 'PLAYING' : 'PAUSED');
@@ -401,7 +444,6 @@
       if (followActive) {
         // Update current percent based on new scroll height
         followCurrentPercent = getCurrentPercentFromPosition();
-        console.log('Settings changed: Updated follow position to', followCurrentPercent.toFixed(2) + '%');
       }
     });
 
@@ -411,11 +453,10 @@
     let followActive = false;
     let followAnimationFrame = null;
 
-    // How quickly to approach target (lower = smoother but slower)
-    // 0.03 means move 3% of the remaining distance each frame
-    // At 60fps: very smooth transitions, reaches 95% in ~1.7sec
-    // Combined with MAX_JUMP_WORDS limit, creates buttery smooth scrolling
-    const FOLLOW_SMOOTHING = 0.03;
+    // How quickly to approach target (higher = faster response)
+    // 0.15 means move 15% of the remaining distance each frame
+    // At 60fps: reaches 95% of target in ~0.3sec - very responsive for instructors
+    const FOLLOW_SMOOTHING = 0.15;
 
     function getCurrentPercentFromPosition() {
       calculateScrollHeight();
@@ -461,14 +502,19 @@
     }
 
     function setFollowTarget(percent) {
-      console.log('Voice follow: Setting target to', percent.toFixed(2) + '%');
       followTargetPercent = percent;
 
       // Start follow loop if not already running
       if (!followActive) {
+        // IMPORTANT: Stop traditional scroll first to prevent conflicts
+        isPlaying = false;
+        if (scrollAnimationId) {
+          cancelAnimationFrame(scrollAnimationId);
+          scrollAnimationId = null;
+        }
+
         followActive = true;
         followCurrentPercent = getCurrentPercentFromPosition();
-        console.log('Voice follow: Starting loop, current position:', followCurrentPercent.toFixed(2) + '%');
         runFollowLoop();
       }
     }

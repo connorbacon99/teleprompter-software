@@ -51,15 +51,27 @@ teleprompter-software/
     │                          - Remote control HTTP server
     │                          - Auto-update with electron-updater
     │
-    ├── operator.html         # Operator control panel UI
+    ├── css/
+    │   └── operator.css      # Operator styles (968 lines)
+    │                          - CSS variables for theming
     │                          - Modern dark theme (purple/cyan accents)
+    │                          - Component styles for all UI elements
+    │
+    ├── js/
+    │   └── operator.js       # Operator JavaScript (1719 lines)
+    │                          - Playback controls with countdown
+    │                          - Voice Follow (Whisper speech recognition)
+    │                          - Settings management
+    │                          - Cue markers functionality
+    │                          - Mobile/remote control
+    │                          - Auto-update handling
+    │
+    ├── operator.html         # Operator control panel UI (390 lines)
+    │                          - HTML structure only
+    │                          - Links to external CSS/JS
     │                          - Script editor with monitor preview
     │                          - Display selection
-    │                          - Playback controls with countdown
-    │                          - Style settings (font, color, mirror/flip)
-    │                          - Cue markers with custom modal
     │                          - Remote control with QR code
-    │                          - Update notification banner
     │
     └── teleprompter.html     # Teleprompter display output
                                - Full-screen script display
@@ -386,6 +398,66 @@ teleprompter-software/
 - Separated cached vs download loading paths:
   - Cached: Uses local filesystem path directly with `local_files_only: true`
   - Download: Uses standard Hugging Face hub with `cache_dir` option
+
+---
+
+### 2025-12-09 - Enhancement: Smooth Teleprompter Scrolling
+- Fixed jittery scrolling in normal playback mode
+- Changes to teleprompter.html:
+  1. Removed CSS transition on `.script-wrapper` (was causing 50ms delay conflicts)
+  2. Added `will-change: transform` for GPU optimization
+  3. Replaced `setInterval` with `requestAnimationFrame` for display-synced animation
+  4. Added delta-time based movement calculation for consistent speed regardless of frame rate
+  5. Proper animation cancellation when pausing or resetting
+- Benefits:
+  - Animation now syncs with display refresh rate (typically 60Hz)
+  - Eliminates jitter from CSS transition conflicts
+  - Consistent speed even if frames are dropped
+
+---
+
+### 2025-12-09 - Bug Fix: Voice Follow Not Scrolling
+- Fixed bug where voice follow would recognize speech but not scroll the teleprompter
+- Root cause: `voiceFollowActive` flag was never being set to `true` in `startWhisperVoiceFollow()`
+- This caused:
+  - `scriptWords` array to appear empty when checking in `findMatchingWordIndex()`
+  - Script text changes not triggering `prepareScriptForVoice()` to re-parse
+  - Other voice follow dependent code not functioning
+- Fix: Added `voiceFollowActive = true` at end of successful `startWhisperVoiceFollow()`
+- Fix: Added `voiceFollowActive = false` at start of `stopWhisperVoiceFollow()` and in error handler
+- Added debug logging to trace script preparation and word matching
+
+---
+
+### 2025-12-09 - Enhancement: Voice Follow Performance Tuning
+- Optimized voice follow parameters for better instructor experience:
+  - `WHISPER_CHUNK_SECONDS`: Changed from 0.5 to 1.0 (smoother, less jumpy)
+  - `FOLLOW_SMOOTHING`: Changed from 0.08 to 0.15 (faster response, ~0.3sec to target)
+- Fixed Voice Mode UI state:
+  - Added `updatePlayButton()` calls when voice follow starts/stops
+  - Play button now correctly shows "Voice Mode" when enabled
+
+---
+
+## Codebase Cleanup Plan (Pre-v1.0.2 Release)
+
+### Phase 1: HIGH PRIORITY - Bug Fixes & Critical Issues (COMPLETED)
+- [x] Fix `playBtn` → `playPauseBtn` bug (operator.html line ~2829)
+- [x] Fix `audioStream`/`mediaStream` variable naming inconsistency
+- [x] Remove unused `processor` declaration
+- [x] Merge duplicate `update-status` IPC listeners
+- [x] Remove unused `@deepgram/sdk` from package.json
+
+### Phase 2: MEDIUM PRIORITY - Dead Code Removal (IN PROGRESS)
+- [ ] Remove unused variables (findMatchIndex in cue markers, etc.)
+- [ ] Remove commented/legacy code blocks
+- [ ] Clean up unused CSS selectors
+- [x] Remove ~58 console.log statements for production (49 removed from operator.html and teleprompter.html)
+
+### Phase 3: LOW PRIORITY - Code Organization
+- [ ] Consolidate related functions
+- [ ] Improve code comments where needed
+- [ ] Consider extracting shared utilities
 
 ---
 

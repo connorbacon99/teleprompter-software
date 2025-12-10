@@ -1,6 +1,6 @@
 {
   "name": "umbrellaprompter",
-  "version": "1.0.1",
+  "version": "1.0.5",
   "description": "Professional teleprompter software for studio use",
   "main": "src/main.js",
   "scripts": {
@@ -19,7 +19,6 @@
     "sharp": "^0.34.5"
   },
   "dependencies": {
-    "@deepgram/sdk": "^4.11.2",
     "@huggingface/transformers": "^3.8.1",
     "electron-updater": "^6.6.2",
     "mammoth": "^1.6.0",
