@@ -1,8 +1,1360 @@
-/**
- * Umbrellaprompter - Operator Window JavaScript
- * Sections: State, Monitor, Script, Playback, Settings, Cue Markers, Mobile, Updates, Voice Follow
- */
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Umbrellaprompter</title>
+  <style>
+    :root {
+      --bg-primary: #0a0a0f;
+      --bg-secondary: #12121a;
+      --bg-tertiary: #1a1a24;
+      --bg-hover: #252532;
+      --bg-glass: rgba(255, 255, 255, 0.03);
+      --border: #2a2a3a;
+      --border-subtle: #1e1e2a;
+      --border-glow: rgba(139, 92, 246, 0.3);
+      --text-primary: #f0f0f5;
+      --text-secondary: #9090a0;
+      --text-tertiary: #606070;
+      --accent: #8b5cf6;
+      --accent-hover: #7c3aed;
+      --accent-subtle: rgba(139, 92, 246, 0.1);
+      --accent-glow: rgba(139, 92, 246, 0.4);
+      --accent-secondary: #06b6d4;
+      --success: #10b981;
+      --success-hover: #059669;
+      --success-glow: rgba(16, 185, 129, 0.3);
+      --danger: #f43f5e;
+      --warning: #f59e0b;
+      --gradient-accent: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%);
+      --gradient-success: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+      --gradient-surface: linear-gradient(180deg, rgba(139, 92, 246, 0.05) 0%, transparent 100%);
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.5);
+      --shadow-md: 0 4px 20px rgba(0,0,0,0.4);
+      --shadow-glow: 0 0 20px var(--accent-glow);
+      --transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
 
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Header */
+    .header {
+      background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      -webkit-app-region: drag;
+      position: relative;
+    }
+
+    .header::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent-glow), transparent);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-right: 8px;
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .logo-icon svg { width: 32px; height: 32px; }
+    .logo-text {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+      background: var(--gradient-accent);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .header-divider { width: 1px; height: 24px; background: var(--border); opacity: 0.5; }
+
+    .btn {
+      -webkit-app-region: no-drag;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 8px 14px;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 500;
+      transition: all var(--transition);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      letter-spacing: 0.02em;
+      text-align: center;
+    }
+
+    .btn:hover { background: var(--bg-hover); border-color: var(--accent); transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: white; }
+    .btn.primary:hover { background: var(--accent-hover); box-shadow: 0 4px 16px var(--accent-glow); }
+    .btn.success { background: var(--success); border-color: var(--success); color: white; }
+    .btn.success:hover { background: var(--success-hover); box-shadow: 0 4px 16px var(--success-glow); }
+    .btn.ghost { background: var(--bg-tertiary); border-color: var(--border); }
+    .btn.ghost:hover { background: var(--bg-hover); border-color: var(--accent); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .btn svg { width: 13px; height: 13px; fill: currentColor; }
+
+    .file-indicator {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-tertiary);
+      font-size: 12px;
+    }
+
+    .file-indicator .dot { width: 6px; height: 6px; background: var(--success); border-radius: 50%; }
+
+    /* Version display */
+    .version-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: 12px;
+      padding-left: 12px;
+      border-left: 1px solid var(--border);
+    }
+    .version-badge {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      background: var(--bg-tertiary);
+      padding: 4px 8px;
+      border-radius: var(--radius-sm);
+      font-weight: 500;
+    }
+    .btn-check-updates {
+      padding: 4px 10px;
+      font-size: 10px;
+    }
+    .btn-check-updates.checking {
+      opacity: 0.6;
+      pointer-events: none;
+    }
+
+    /* Main Layout */
+    .main { display: flex; flex: 1; overflow: hidden; }
+
+    /* Script Panel */
+    .script-panel { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+    .script-header {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .script-header h2 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: 0.02em;
+    }
+
+    .script-meta { display: flex; gap: 16px; align-items: center; }
+    .char-count { font-size: 11px; color: var(--text-tertiary); }
+
+    /* View toggle buttons */
+    .view-toggle { display: flex; gap: 4px; }
+    .view-toggle .btn { padding: 4px 10px; font-size: 11px; }
+    .view-toggle .btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+    .script-content { flex: 1; display: flex; overflow: hidden; }
+
+    .script-editor { flex: 1; padding: 16px; overflow: hidden; display: none; }
+    .script-editor.active { display: flex; }
+
+    .script-editor textarea {
+      width: 100%;
+      height: 100%;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      color: var(--text-primary);
+      font-size: 15px;
+      line-height: 1.8;
+      padding: 24px;
+      resize: none;
+      font-family: inherit;
+      transition: all var(--transition);
+    }
+
+    .script-editor textarea:hover { border-color: var(--text-tertiary); }
+    .script-editor textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-subtle); }
+    .script-editor textarea::placeholder { color: var(--text-tertiary); }
+
+    /* Live Monitor View - scaled clone of teleprompter */
+    .script-monitor { flex: 1; padding: 16px; overflow: hidden; display: none; flex-direction: column; }
+    .script-monitor.active { display: flex; }
+
+    .monitor-container {
+      flex: 1;
+      background: #000;
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* The preview frame clips the scaled content */
+    .monitor-preview-frame {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+    }
+
+    /* This is a clone of the teleprompter - renders at teleprompter size, then scaled */
+    .monitor-preview {
+      position: relative;
+      /* width/height set dynamically by JS to match teleprompter display */
+      width: 1920px;
+      height: 1080px;
+      background: #000;
+      transform-origin: 0 0;
+      overflow: hidden;
+    }
+
+    /* Inner container for mirror/flip - uses center origin so flip works correctly */
+    .monitor-flip-container {
+      position: absolute;
+      inset: 0;
+      transform-origin: center center;
+    }
+
+    .monitor-preview .gradient-top {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 20%;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+      pointer-events: none;
+      z-index: 50;
+    }
+
+    .monitor-preview .reading-guide {
+      position: absolute;
+      top: 50%;
+      left: 0; right: 0;
+      height: 2px;
+      background: rgba(59, 130, 246, 0.4);
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    .monitor-preview .gradient-bottom {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 20%;
+      background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+      pointer-events: none;
+      z-index: 50;
+    }
+
+    .monitor-preview .script-wrapper {
+      position: absolute;
+      width: 100%;
+      padding: 10% 15%;
+      /* Smooth transition between position updates (updates come ~6x per second) */
+      transition: transform 0.15s linear;
+    }
+
+    .monitor-preview .script-text {
+      font-size: 72px;
+      line-height: 1.5;
+      text-align: center;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      color: #fff;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    /* Word highlight for voice follow position in monitor */
+    .monitor-preview .script-text .monitor-word {
+      transition: background-color 0.15s ease;
+    }
+
+    .monitor-preview .script-text .monitor-word.highlighted {
+      background-color: rgba(139, 92, 246, 0.5);
+      border-radius: 4px;
+      padding: 0 4px;
+      margin: 0 -4px;
+    }
+
+    /* Progress bar */
+    .monitor-progress {
+      height: 4px;
+      background: var(--bg-tertiary);
+      border-radius: 2px;
+      margin-top: 12px;
+      overflow: hidden;
+    }
+
+    .monitor-progress-bar {
+      height: 100%;
+      background: var(--accent);
+      width: 0%;
+      transition: width 0.1s linear;
+    }
+
+    .monitor-status {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--text-tertiary);
+    }
+
+    .monitor-status .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .monitor-status .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-tertiary);
+    }
+
+    .monitor-status .status-dot.playing {
+      background: var(--success);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Monitor Countdown Overlay */
+    .monitor-countdown-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.9);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 500;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+
+    .monitor-countdown-overlay.visible {
+      opacity: 1;
+    }
+
+    .monitor-countdown-number {
+      font-size: 200px;
+      font-weight: 700;
+      color: #3b82f6;
+      line-height: 1;
+      animation: monitorCountdownPulse 1s ease-in-out infinite;
+    }
+
+    .monitor-countdown-text {
+      font-size: 24px;
+      color: #71717a;
+      margin-top: 20px;
+      text-transform: uppercase;
+      letter-spacing: 4px;
+    }
+
+    @keyframes monitorCountdownPulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.1); opacity: 0.8; }
+    }
+
+    .monitor-countdown-go {
+      font-size: 150px;
+      font-weight: 700;
+      color: #22c55e;
+      animation: monitorGoAnimation 0.5s ease-out forwards;
+    }
+
+    @keyframes monitorGoAnimation {
+      0% { transform: scale(0.5); opacity: 0; }
+      50% { transform: scale(1.2); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    /* Spinner animation for loading */
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    /* Voice Follow */
+    .voice-follow-section {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .voice-follow-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .voice-follow-header label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .voice-follow-header .mic-icon {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+    }
+
+    .voice-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      background: var(--bg-secondary);
+      border-radius: var(--radius-md);
+      font-size: 11px;
+      color: var(--text-tertiary);
+    }
+
+    .voice-status.listening {
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--success);
+    }
+
+    .voice-status.listening .voice-indicator {
+      background: var(--success);
+      animation: voicePulse 1s ease-in-out infinite;
+    }
+
+    .voice-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-tertiary);
+    }
+
+    @keyframes voicePulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.3); opacity: 0.7; }
+    }
+
+    .voice-transcript {
+      margin-top: 8px;
+      padding: 8px;
+      background: var(--bg-secondary);
+      border-radius: var(--radius-md);
+      font-size: 11px;
+      color: var(--text-tertiary);
+      max-height: 60px;
+      overflow-y: auto;
+      font-style: italic;
+    }
+
+    .voice-transcript .heard-word {
+      color: var(--success);
+      font-weight: 500;
+    }
+
+    /* Control Panel */
+    .control-panel {
+      width: 300px;
+      background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+      border-left: 1px solid var(--border-subtle);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+
+    .control-section {
+      background: var(--bg-glass);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      transition: all var(--transition);
+      backdrop-filter: blur(10px);
+    }
+
+    .control-section:hover {
+      border-color: var(--border-glow);
+      box-shadow: 0 0 20px rgba(139, 92, 246, 0.05);
+    }
+
+    .section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .section-header svg { width: 16px; height: 16px; fill: url(#iconGrad); }
+    .section-header .icon-wrapper {
+      width: 28px;
+      height: 28px;
+      background: var(--accent-subtle);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .section-header .icon-wrapper svg { width: 14px; height: 14px; fill: var(--accent); }
+
+    .section-header h3 {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: 0.01em;
+    }
+
+    /* Select */
+    .select-wrapper { position: relative; margin-bottom: 10px; }
+
+    .select-wrapper select {
+      width: 100%;
+      padding: 10px 12px;
+      padding-right: 36px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      font-size: 12px;
+      cursor: pointer;
+      appearance: none;
+      transition: all var(--transition);
+    }
+
+    .select-wrapper select:hover { border-color: var(--text-tertiary); }
+    .select-wrapper select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-subtle); }
+
+    .select-wrapper::after {
+      content: '';
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0;
+      height: 0;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 6px solid var(--text-tertiary);
+      pointer-events: none;
+      transition: border-color var(--transition);
+    }
+
+    .select-wrapper:hover::after { border-top-color: var(--text-secondary); }
+
+    .button-row { display: flex; gap: 6px; }
+    .button-row .btn { flex: 1; justify-content: center; }
+
+    /* Playback */
+    .playback-main { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 14px; }
+    .btn-play { padding: 14px 20px; font-size: 12px; font-weight: 600; }
+    .btn-reset { padding: 14px 16px; }
+
+    /* Slider */
+    .slider-group { margin-bottom: 12px; }
+    .slider-group:last-child { margin-bottom: 0; }
+
+    .slider-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .slider-label span { font-size: 11px; color: var(--text-secondary); }
+
+    .slider-value {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-subtle);
+      padding: 4px 10px;
+      border-radius: var(--radius-sm);
+      font-variant-numeric: tabular-nums;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--bg-tertiary);
+      outline: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      transition: all var(--transition);
+      border: 2px solid var(--bg-primary);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.1); background: var(--accent-hover); }
+
+    /* Position buttons */
+    .position-actions { display: flex; gap: 6px; margin-top: 10px; }
+    .position-actions .btn { flex: 1; justify-content: center; padding: 6px; font-size: 11px; }
+
+    /* Style Controls */
+    .style-grid { display: grid; gap: 10px; }
+
+    .style-row { display: flex; align-items: center; justify-content: space-between; }
+    .style-row label { font-size: 12px; color: var(--text-secondary); }
+
+    .style-row input[type="number"] {
+      width: 70px;
+      padding: 8px 10px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      font-size: 12px;
+      font-weight: 500;
+      text-align: center;
+      transition: all var(--transition);
+    }
+
+    .style-row input[type="number"]:hover { border-color: var(--text-tertiary); }
+    .style-row input[type="number"]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-subtle); }
+
+    /* Draggable number input */
+    .style-row input[type="number"].draggable {
+      cursor: ew-resize;
+      user-select: none;
+    }
+
+    .style-row input[type="number"].draggable:active {
+      cursor: ew-resize;
+    }
+
+    .color-input-wrapper { position: relative; width: 70px; height: 34px; }
+
+    .color-input-wrapper input[type="color"] {
+      width: 100%;
+      height: 100%;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      padding: 3px;
+      background: var(--bg-tertiary);
+      transition: all var(--transition);
+    }
+
+    .color-input-wrapper input[type="color"]:hover { border-color: var(--text-tertiary); }
+    .color-input-wrapper input[type="color"]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-subtle); }
+    .color-input-wrapper input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+    .color-input-wrapper input[type="color"]::-webkit-color-swatch { border: none; border-radius: 6px; }
+
+    /* General text input styling */
+    input[type="text"], input[type="number"] {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      font-size: 12px;
+      padding: 8px 10px;
+      transition: all var(--transition);
+    }
+
+    input[type="text"]:hover, input[type="number"]:hover { border-color: var(--text-tertiary); }
+    input[type="text"]:focus, input[type="number"]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-subtle); }
+
+    /* Toggle */
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; }
+    .toggle-row label { font-size: 12px; color: var(--text-secondary); cursor: pointer; }
+
+    .toggle { position: relative; width: 40px; height: 22px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background: var(--bg-tertiary);
+      border-radius: 11px;
+      transition: all var(--transition);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .toggle-slider::before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 2px;
+      bottom: 2px;
+      background: var(--text-secondary);
+      border-radius: 50%;
+      transition: all var(--transition);
+    }
+
+    .toggle input:checked + .toggle-slider { background: var(--accent); border-color: var(--accent); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(18px); background: white; }
+
+    /* Countdown */
+    .countdown-row { display: flex; align-items: center; gap: 8px; }
+    .countdown-row label { font-size: 12px; color: var(--text-secondary); }
+    .countdown-row input[type="number"] {
+      width: 60px;
+      -moz-appearance: textfield;
+    }
+    .countdown-row input[type="number"]::-webkit-outer-spin-button,
+    .countdown-row input[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    /* Cue Markers */
+    .cue-list { max-height: 150px; overflow-y: auto; margin-top: 10px; }
+
+    .cue-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: var(--bg-secondary);
+      border-radius: var(--radius-md);
+      margin-bottom: 6px;
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+
+    .cue-item:hover { background: var(--bg-tertiary); }
+
+    .cue-item .cue-name {
+      flex: 1;
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cue-item .cue-delete {
+      opacity: 0;
+      color: var(--danger);
+      cursor: pointer;
+      transition: opacity var(--transition);
+    }
+
+    .cue-item:hover .cue-delete { opacity: 1; }
+    .no-cues { font-size: 11px; color: var(--text-tertiary); text-align: center; padding: 16px; }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .modal-overlay.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      min-width: 300px;
+      max-width: 400px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+    .modal h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--text-primary);
+    }
+    .modal input[type="text"] {
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 16px;
+      font-size: 14px;
+    }
+    .modal-buttons {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .modal-buttons .btn {
+      padding: 10px 20px;
+    }
+
+    /* Remote Control */
+    .remote-status { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .remote-status .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
+    .remote-status .status-dot.active { background: var(--success); }
+    .remote-status span { font-size: 12px; color: var(--text-secondary); }
+    .qr-container { text-align: center; margin-bottom: 10px; }
+    .qr-container img { box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+
+    .remote-url {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 10px;
+      margin-top: 10px;
+    }
+
+    .remote-url-label { font-size: 10px; color: var(--text-tertiary); margin-bottom: 4px; }
+
+    .remote-url-text {
+      font-size: 13px;
+      font-family: monospace;
+      color: var(--accent);
+      word-break: break-all;
+    }
+
+    /* Keyboard hints */
+    .keyboard-hints {
+      margin-top: auto;
+      padding: 14px;
+      background: var(--bg-glass);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      backdrop-filter: blur(10px);
+    }
+
+    .keyboard-hints h4 {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+    }
+
+    .hint-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; }
+    .hint-row span { font-size: 11px; color: var(--text-tertiary); }
+
+    .kbd {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 3px 8px;
+      font-size: 10px;
+      font-family: inherit;
+      font-weight: 500;
+      color: var(--text-secondary);
+      box-shadow: 0 2px 0 var(--border);
+    }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+
+    .tab {
+      flex: 1;
+      padding: 10px 8px;
+      background: transparent;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      color: var(--text-tertiary);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all var(--transition);
+      text-align: center;
+    }
+
+    .tab:hover { background: var(--bg-tertiary); color: var(--text-secondary); border-color: var(--border); }
+    .tab.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Update Banner */
+    .update-banner {
+      display: none;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-secondary) 100%);
+      padding: 10px 20px;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .update-banner.visible { display: flex; }
+    .update-banner-icon {
+      width: 20px;
+      height: 20px;
+      fill: white;
+    }
+    .update-banner-text {
+      flex: 1;
+      font-size: 13px;
+      font-weight: 500;
+      color: white;
+    }
+    .update-banner-text span { opacity: 0.8; font-weight: 400; }
+    .update-banner .btn {
+      background: rgba(255,255,255,0.2);
+      border-color: rgba(255,255,255,0.3);
+      color: white;
+      padding: 6px 12px;
+      font-size: 11px;
+    }
+    .update-banner .btn:hover {
+      background: rgba(255,255,255,0.3);
+      border-color: rgba(255,255,255,0.4);
+      transform: none;
+      box-shadow: none;
+    }
+    .update-banner-close {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.7);
+      cursor: pointer;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .update-banner-close:hover { color: white; }
+    .update-banner-close svg { width: 16px; height: 16px; fill: currentColor; }
+    .update-progress {
+      height: 3px;
+      background: rgba(255,255,255,0.3);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 6px;
+    }
+    .update-progress-bar {
+      height: 100%;
+      background: white;
+      border-radius: 2px;
+      transition: width 0.3s;
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 512 512" fill="none">
+          <defs>
+            <linearGradient id="umbrellaGrad" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#00C6FB"/>
+              <stop offset="100%" stop-color="#005BEA"/>
+            </linearGradient>
+            <mask id="iconCutout" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+              <rect width="512" height="512" rx="100" fill="white"/>
+              <g fill="black">
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M256 120C183.107 120 124 179.107 124 252H164C164 201.189 205.189 160 256 160C306.811 160 348 201.189 348 252H388C388 179.107 328.893 120 256 120Z"/>
+                <path d="M174 272L202 360H310L338 272H174Z"/>
+                <rect x="215" y="300" width="82" height="12" rx="6"/>
+                <rect x="215" y="324" width="50" height="12" rx="6"/>
+              </g>
+            </mask>
+          </defs>
+          <rect width="512" height="512" rx="100" fill="url(#umbrellaGrad)" mask="url(#iconCutout)"/>
+        </svg>
+      </div>
+      <span class="logo-text">Umbrellaprompter</span>
+    </div>
+
+    <div class="header-divider"></div>
+
+    <button class="btn" id="openFileBtn">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/></svg>
+      Open
+    </button>
+    <button class="btn ghost" id="newScriptBtn">New</button>
+
+    <div class="header-divider"></div>
+
+    <button class="btn" id="saveProjectBtn">
+      <svg viewBox="0 0 24 24"><path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4z"/></svg>
+      Save Project
+    </button>
+    <button class="btn" id="loadProjectBtn">Load Project</button>
+
+    <div class="header-divider"></div>
+
+    <button class="btn primary" id="sendScriptBtn">
+      <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      Send to Display
+    </button>
+
+    <div class="file-indicator">
+      <span class="dot"></span>
+      <span id="fileName">No file loaded</span>
+    </div>
+
+    <div class="version-info">
+      <span class="version-badge" id="versionBadge">v1.0.0</span>
+      <button class="btn btn-check-updates" id="checkUpdatesBtn">Check for Updates</button>
+    </div>
+  </header>
+
+  <!-- Update Banner -->
+  <div class="update-banner" id="updateBanner">
+    <svg class="update-banner-icon" viewBox="0 0 24 24">
+      <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
+    </svg>
+    <div class="update-banner-text" id="updateText">
+      Update available <span id="updateVersion"></span>
+    </div>
+    <button class="btn" id="updateActionBtn">Download</button>
+    <button class="update-banner-close" id="updateCloseBtn">
+      <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+    </button>
+  </div>
+
+  <main class="main">
+    <div class="script-panel">
+      <div class="script-header">
+        <h2>Script</h2>
+        <div class="script-meta">
+          <div class="view-toggle">
+            <button class="btn active" id="viewEditorBtn">Editor</button>
+            <button class="btn" id="viewMonitorBtn">Monitor</button>
+          </div>
+          <span class="char-count" id="charCount">0 characters</span>
+        </div>
+      </div>
+      <div class="script-content">
+        <div class="script-editor active" id="editorView">
+          <textarea id="scriptText" placeholder="Start typing your script here, or open a Word document..."></textarea>
+        </div>
+        <div class="script-monitor" id="monitorView">
+          <div class="monitor-container" id="monitorContainer">
+            <!-- Scaled clone of teleprompter - renders at teleprompter size then scaled down -->
+            <div class="monitor-preview-frame">
+              <div class="monitor-preview" id="monitorPreview">
+                <!-- Inner container for mirror/flip transforms (separate from scale) -->
+                <div class="monitor-flip-container" id="monitorFlipContainer">
+                  <div class="gradient-top"></div>
+                  <div class="reading-guide"></div>
+                  <div class="script-wrapper" id="monitorScriptWrapper">
+                    <div class="script-text" id="monitorScriptText">Waiting for script...</div>
+                  </div>
+                  <div class="gradient-bottom"></div>
+                  <!-- Countdown Overlay -->
+                  <div class="monitor-countdown-overlay" id="monitorCountdownOverlay">
+                    <div class="monitor-countdown-number" id="monitorCountdownNumber">3</div>
+                    <div class="monitor-countdown-text">Starting in...</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="monitor-progress">
+            <div class="monitor-progress-bar" id="monitorProgressBar"></div>
+          </div>
+          <div class="monitor-status">
+            <div class="status-badge">
+              <div class="status-dot" id="monitorStatusDot"></div>
+              <span id="monitorStatusText">Ready</span>
+            </div>
+            <button class="btn" id="addCueFromMonitorBtn" style="padding: 4px 8px; font-size: 10px;">
+              <svg viewBox="0 0 24 24" style="width: 12px; height: 12px;"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+              Add Cue
+            </button>
+            <span id="monitorPercent">0%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="control-panel">
+      <!-- Display -->
+      <div class="control-section">
+        <div class="section-header">
+          <svg viewBox="0 0 24 24"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg>
+          <h3>Display Output</h3>
+        </div>
+        <div class="select-wrapper" style="display: flex; gap: 6px;">
+          <select id="displaySelect" style="flex: 1;">
+            <option value="">Select display...</option>
+          </select>
+          <button class="btn" id="refreshDisplaysBtn" title="Refresh displays" style="padding: 8px 10px;">
+            <svg viewBox="0 0 24 24" style="width: 14px; height: 14px;"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+          </button>
+        </div>
+        <div class="button-row">
+          <button class="btn success" id="openDisplayBtn">Open Display</button>
+          <button class="btn" id="closeDisplayBtn">Close</button>
+        </div>
+      </div>
+
+      <!-- Playback -->
+      <div class="control-section">
+        <div class="section-header">
+          <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          <h3>Playback</h3>
+        </div>
+        <div class="playback-main">
+          <button class="btn primary btn-play" id="playPauseBtn">
+            <svg viewBox="0 0 24 24" id="playIcon"><path d="M8 5v14l11-7z"/></svg>
+            <span id="playText">Play</span>
+          </button>
+          <button class="btn btn-reset" id="stopBtn">
+            <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+          </button>
+        </div>
+
+        <div class="toggle-row">
+          <label for="countdownCheckbox">Countdown before start</label>
+          <label class="toggle">
+            <input type="checkbox" id="countdownCheckbox" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="countdown-row" id="countdownRow">
+          <label>Seconds:</label>
+          <input type="number" id="countdownSeconds" value="3" min="1" max="10">
+        </div>
+
+        <div class="slider-group" style="margin-top: 12px;">
+          <div class="slider-label">
+            <span>Speed</span>
+            <span class="slider-value" id="speedValue">30</span>
+          </div>
+          <input type="range" id="speedSlider" min="1" max="100" value="30">
+        </div>
+
+        <!-- Voice Follow -->
+        <div class="voice-follow-section">
+          <div class="voice-follow-header">
+            <label for="voiceFollowCheckbox">
+              <svg class="mic-icon" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+              Voice Follow
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="voiceFollowCheckbox">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <!-- Whisper Info -->
+          <div style="font-size: 10px; color: var(--text-tertiary); margin-bottom: 8px;">
+            Uses Whisper AI - runs locally, free. First use downloads ~280MB model.
+          </div>
+          <!-- Whisper Model Status -->
+          <div id="whisperModelStatus" style="display: none; margin-bottom: 8px; padding: 8px; background: var(--bg-tertiary); border-radius: var(--radius-sm); font-size: 11px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div id="whisperModelSpinner" class="spinner" style="width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+              <span id="whisperModelStatusText">Loading Whisper model...</span>
+            </div>
+            <div id="whisperModelProgress" style="margin-top: 6px; height: 4px; background: var(--bg-secondary); border-radius: 2px; overflow: hidden;">
+              <div id="whisperModelProgressBar" style="height: 100%; background: var(--accent); width: 0%; transition: width 0.3s;"></div>
+            </div>
+          </div>
+          <div class="voice-input-select" style="margin-bottom: 8px;">
+            <select id="audioInputSelect" style="width: 100%; padding: 6px 8px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 11px;">
+              <option value="">Default Microphone</option>
+            </select>
+          </div>
+          <div class="voice-status" id="voiceStatus">
+            <div class="voice-indicator"></div>
+            <span id="voiceStatusText">Off</span>
+            <button class="btn" id="voicePauseBtn" style="display: none; margin-left: auto; padding: 2px 8px; font-size: 10px;">Pause</button>
+          </div>
+          <div class="voice-transcript" id="voiceTranscript" style="display: none;">
+            Listening...
+          </div>
+          <div class="voice-debug" id="voiceDebug" style="display: none; margin-top: 6px; padding: 6px; background: var(--bg-tertiary); border-radius: var(--radius-sm); font-size: 10px; color: var(--text-secondary);">
+            <div>Word: <span id="debugMatchedWord" style="color: #22c55e; font-weight: bold;">-</span></div>
+            <div>Index: <span id="debugWordIndex">0</span> / <span id="debugTotalWords">0</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Position -->
+      <div class="control-section">
+        <div class="section-header">
+          <svg viewBox="0 0 24 24"><path d="M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z"/></svg>
+          <h3>Position</h3>
+        </div>
+        <div class="slider-group">
+          <div class="slider-label">
+            <span>Scroll Position</span>
+            <span class="slider-value" id="positionValue">0%</span>
+          </div>
+          <input type="range" id="positionSlider" min="0" max="100" value="0">
+        </div>
+        <div class="position-actions">
+          <button class="btn" id="jumpStartBtn">Start</button>
+          <button class="btn" id="jumpCursorBtn" title="Jump to cursor position in editor">Cursor</button>
+          <button class="btn" id="jumpEndBtn">End</button>
+        </div>
+        <!-- Find in script -->
+        <div style="margin-top: 10px;">
+          <div style="display: flex; gap: 6px;">
+            <input type="text" id="findTextInput" placeholder="Find text..." style="flex: 1; padding: 6px 8px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-primary); font-size: 12px;">
+            <button class="btn" id="findTextBtn" style="padding: 6px 10px;">Find</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Appearance & Cues Tabs -->
+      <div class="control-section">
+        <div class="tabs">
+          <div class="tab active" data-tab="appearance">Appearance</div>
+          <div class="tab" data-tab="cues">Cue Markers</div>
+          <div class="tab" data-tab="remote">Remote</div>
+        </div>
+
+        <!-- Appearance Tab -->
+        <div class="tab-content active" id="tab-appearance">
+          <div class="style-grid">
+            <div class="style-row">
+              <label>Font</label>
+              <div class="select-wrapper" style="margin: 0; width: 100px;">
+                <select id="fontFamilySelect" style="padding: 6px 8px;">
+                  <option value="Arial">Arial</option>
+                  <option value="Helvetica">Helvetica</option>
+                  <option value="Georgia">Georgia</option>
+                  <option value="Times New Roman">Times</option>
+                  <option value="Verdana">Verdana</option>
+                  <option value="Courier New">Courier</option>
+                </select>
+              </div>
+            </div>
+            <div class="style-row">
+              <label>Font Size</label>
+              <input type="number" id="fontSizeInput" class="draggable" value="72" min="24" max="200" title="Click and drag left/right to adjust">
+            </div>
+            <div class="style-row">
+              <label>Text Color</label>
+              <div class="color-input-wrapper">
+                <input type="color" id="textColorInput" value="#ffffff">
+              </div>
+            </div>
+            <div class="style-row">
+              <label>Background</label>
+              <div class="color-input-wrapper">
+                <input type="color" id="bgColorInput" value="#000000">
+              </div>
+            </div>
+            <div class="toggle-row">
+              <label for="mirrorCheckbox">Mirror (Horizontal)</label>
+              <label class="toggle">
+                <input type="checkbox" id="mirrorCheckbox">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="toggle-row">
+              <label for="flipCheckbox">Flip (Vertical)</label>
+              <label class="toggle">
+                <input type="checkbox" id="flipCheckbox">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cue Markers Tab -->
+        <div class="tab-content" id="tab-cues">
+          <button class="btn" id="addCueBtn" style="width: 100%; justify-content: center; margin-bottom: 10px;">
+            <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            Add Cue at Cursor
+          </button>
+          <div class="cue-list" id="cueList">
+            <div class="no-cues">No cue markers. Add markers to quickly jump to sections.</div>
+          </div>
+        </div>
+
+        <!-- Remote Tab -->
+        <div class="tab-content" id="tab-remote">
+          <div class="remote-status">
+            <div class="status-dot" id="remoteStatusDot"></div>
+            <span id="remoteStatusText">Remote control off</span>
+          </div>
+          <div class="button-row">
+            <button class="btn success" id="startRemoteBtn">Start Server</button>
+            <button class="btn" id="stopRemoteBtn">Stop</button>
+          </div>
+          <div class="remote-url" id="remoteUrlBox" style="display: none;">
+            <div class="qr-container">
+              <img id="remoteQrCode" alt="QR Code" style="width: 150px; height: 150px; border-radius: 8px; background: white; padding: 8px;">
+            </div>
+            <div class="remote-url-label">Scan QR code or open URL:</div>
+            <div class="remote-url-text" id="remoteUrl"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Keyboard shortcuts -->
+      <div class="keyboard-hints">
+        <h4>Keyboard Shortcuts</h4>
+        <div class="hint-row">
+          <span>Play / Pause</span>
+          <kbd class="kbd">Space</kbd>
+        </div>
+        <div class="hint-row">
+          <span>Speed +/-</span>
+          <kbd class="kbd">↑</kbd> <kbd class="kbd">↓</kbd>
+        </div>
+        <div class="hint-row">
+          <span>Jump Start/End</span>
+          <kbd class="kbd">Home</kbd> <kbd class="kbd">End</kbd>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Cue Name Modal -->
+  <div class="modal-overlay" id="cueModal">
+    <div class="modal">
+      <h3>Add Cue Marker</h3>
+      <input type="text" id="cueNameInput" placeholder="Enter cue name...">
+      <div class="modal-buttons">
+        <button class="btn" id="cueCancelBtn">Cancel</button>
+        <button class="btn primary" id="cueSaveBtn">Add Cue</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
     const { ipcRenderer } = require('electron');
 
     // Elements
@@ -25,13 +1377,6 @@
     const countdownCheckbox = document.getElementById('countdownCheckbox');
     const countdownSeconds = document.getElementById('countdownSeconds');
     const cueList = document.getElementById('cueList');
-
-    // Helper to set textarea value while preserving undo stack
-    function setTextWithUndo(textarea, newValue) {
-      textarea.focus();
-      textarea.select();
-      document.execCommand('insertText', false, newValue);
-    }
 
     // Monitor elements
     const monitorContainer = document.getElementById('monitorContainer');
@@ -285,21 +1630,6 @@
 
     scriptText.addEventListener('input', updateCharCount);
 
-    // Clean up script - remove extra blank lines and bracketed text
-    document.getElementById('cleanUpBtn').addEventListener('click', () => {
-      let cleaned = scriptText.value
-        .replace(/\[.*?\]\s*/g, '') // Remove text in square brackets [like this] and trailing space
-        .split('\n')
-        .map(line => line.trimEnd()) // Remove trailing spaces from each line
-        .join('\n')
-        .replace(/\n{2,}/g, '\n') // Reduce 2+ newlines to 1
-        .trim(); // Trim start and end
-
-      setTextWithUndo(scriptText, cleaned);
-      updateCharCount();
-      sendScript();
-    });
-
     // Open file
     document.getElementById('openFileBtn').addEventListener('click', async () => {
       const filePath = await ipcRenderer.invoke('open-file-dialog');
@@ -356,15 +1686,6 @@
       }
     });
 
-    // Export to Word document
-    document.getElementById('exportDocxBtn').addEventListener('click', async () => {
-      const suggestedName = fileName.textContent.replace(/\.[^/.]+$/, '') + '.docx';
-      const result = await ipcRenderer.invoke('export-docx', scriptText.value, suggestedName);
-      if (!result.success && result.error) {
-        alert('Error exporting: ' + result.error);
-      }
-    });
-
     // Load project
     document.getElementById('loadProjectBtn').addEventListener('click', async () => {
       const result = await ipcRenderer.invoke('load-project');
@@ -401,6 +1722,8 @@
         cueMarkers: cueMarkers
       });
     }
+
+    document.getElementById('sendScriptBtn').addEventListener('click', sendScript);
 
     // Open teleprompter display
     document.getElementById('openDisplayBtn').addEventListener('click', async () => {
@@ -444,29 +1767,10 @@
       updateMonitorStatus();
     }
 
-    playPauseBtn.addEventListener('click', async () => {
+    playPauseBtn.addEventListener('click', () => {
       // VOICE FOLLOW MODE: Block play/pause - voice controls everything
       if (voiceFollowActive) {
         return;
-      }
-
-      // When starting playback, auto-switch to monitor view and open display
-      if (!isPlaying) {
-        // Switch to monitor view
-        viewMonitorBtn.classList.add('active');
-        viewEditorBtn.classList.remove('active');
-        monitorView.classList.add('active');
-        editorView.classList.remove('active');
-        updateMonitorScale();
-
-        // Open display only if not already open
-        const isOpen = await ipcRenderer.invoke('is-teleprompter-open');
-        if (!isOpen) {
-          const displayId = displaySelect.value ? parseInt(displaySelect.value) : null;
-          currentDisplayId = await ipcRenderer.invoke('open-teleprompter', displayId);
-          sendScript();
-          sendSettings();
-        }
       }
 
       if (!isPlaying && countdownCheckbox.checked) {
@@ -756,63 +2060,6 @@
       showCueModal(`Cue ${cueMarkers.length + 1}`);
     });
 
-    // Edit from monitor view
-    let isMonitorEditing = false;
-    const editFromMonitorBtn = document.getElementById('editFromMonitorBtn');
-
-    editFromMonitorBtn.addEventListener('click', () => {
-      isMonitorEditing = !isMonitorEditing;
-
-      if (isMonitorEditing) {
-        // Enable editing
-        monitorScriptText.contentEditable = 'true';
-        monitorScriptText.style.cursor = 'text';
-        monitorScriptText.style.outline = '2px solid var(--accent-primary)';
-        monitorScriptText.style.borderRadius = '4px';
-        editFromMonitorBtn.classList.add('success');
-        editFromMonitorBtn.innerHTML = '<svg viewBox="0 0 24 24" style="width: 12px; height: 12px;"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Done';
-      } else {
-        // Disable editing and sync back to editor
-        monitorScriptText.contentEditable = 'false';
-        monitorScriptText.style.cursor = '';
-        monitorScriptText.style.outline = '';
-        editFromMonitorBtn.classList.remove('success');
-        editFromMonitorBtn.innerHTML = '<svg viewBox="0 0 24 24" style="width: 12px; height: 12px;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg> Edit';
-
-        // Sync edited content back to editor (extract text from HTML)
-        scriptText.value = monitorScriptText.innerText;
-        updateCharCount();
-        sendScript();
-      }
-    });
-
-    // Selection sync: when selecting in monitor, highlight in editor
-    monitorScriptText.addEventListener('mouseup', () => {
-      if (isMonitorEditing) return; // Don't sync during editing
-
-      const selection = window.getSelection();
-      if (selection.rangeCount > 0 && !selection.isCollapsed) {
-        const selectedText = selection.toString();
-        if (selectedText.trim()) {
-          // Find the selected text in the editor
-          const editorText = scriptText.value;
-          const startIndex = editorText.indexOf(selectedText);
-
-          if (startIndex !== -1) {
-            // Switch to editor view and select the text
-            viewEditorBtn.classList.add('active');
-            viewMonitorBtn.classList.remove('active');
-            editorView.classList.add('active');
-            monitorView.classList.remove('active');
-
-            // Focus and select in editor
-            scriptText.focus();
-            scriptText.setSelectionRange(startIndex, startIndex + selectedText.length);
-          }
-        }
-      }
-    });
-
     cueModal.addEventListener('click', (e) => {
       if (e.target === cueModal) hideCueModal();
     });
@@ -861,9 +2108,7 @@
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
-      // Skip shortcuts when typing in text inputs
       if (e.target === scriptText) return;
-      if (e.target.isContentEditable) return; // Skip when editing in monitor
 
       if (e.code === 'Space') {
         e.preventDefault();
@@ -1822,3 +3067,6 @@
         setTimeout(() => startWhisperVoiceFollow(), 100);
       }
     });
+  </script>
+</body>
+</html>
