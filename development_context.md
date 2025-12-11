@@ -91,7 +91,9 @@ teleprompter-software/
 - **electron** (^28.0.0) - Desktop application framework
 - **electron-builder** (^24.9.1) - Build/packaging tool
 - **electron-updater** (^6.6.2) - Auto-update from GitHub Releases
-- **mammoth** (^1.6.0) - Word document (.docx) parsing
+- **mammoth** (^1.6.0) - Word document (.docx) import/parsing
+- **docx** (^9.5.0) - Word document (.docx) export/creation
+- **jszip** (^3.10.1) - PowerPoint (.pptx) parsing (ZIP archive extraction)
 - **qrcode** (^1.5.4) - QR code generation for remote control
 - **@huggingface/transformers** (^3.4.1) - Whisper speech recognition (local/free)
 - **sharp** (^0.34.5, devDep) - SVG to PNG icon conversion
@@ -436,6 +438,45 @@ teleprompter-software/
 - Fixed Voice Mode UI state:
   - Added `updatePlayButton()` calls when voice follow starts/stops
   - Play button now correctly shows "Voice Mode" when enabled
+
+---
+
+### 2025-12-10 - v1.0.5: PowerPoint Import & Editor Improvements
+- Added PowerPoint (.pptx) import for speaker notes:
+  - Extracts notes from each slide using jszip library
+  - Formats as `[Slide 1] notes text...\n[Slide 2] notes text...`
+  - Filters out page number placeholders
+- Added Export to .docx:
+  - Export button in header exports current script to Word document
+  - Uses docx library to create properly formatted document
+- Added Clean Up button:
+  - Removes `[bracketed text]` (slide labels, stage directions)
+  - Removes trailing whitespace and multiple blank lines
+  - Supports Cmd+Z undo via `setTextWithUndo()` helper
+- Added Edit button in monitor view for inline script editing
+- Play button now auto-opens display and switches to monitor view
+- Selection sync: selecting text in monitor highlights it in editor
+
+---
+
+### 2025-12-10 - v1.0.6: Bug Fixes & Scrolling Improvements
+- Fixed playback starting from beginning instead of monitor position:
+  - Root cause: IPC timing - script message sent before teleprompter window ready
+  - Fix: Added 500ms delay before sending script with initial position
+  - Position now included directly in script message (not separate IPC)
+- Fixed PowerPoint import spacing:
+  - Periods and punctuation no longer have space before them
+  - Intelligent text joining: no space before `.,!?;:)]}`
+- Fixed position reset when editing script:
+  - Added `hasLoadedScript` flag in teleprompter.html
+  - Preserves percentage position on edits, only resets on first load
+- Fixed editor scroll when switching from monitor:
+  - Editor now scrolls to center the selected text
+- Added smooth scrolling for monitor preview:
+  - Uses requestAnimationFrame with easing animation
+  - Accumulates scroll input toward target position
+  - Smoother trackpad experience with 0.15 smoothing factor
+- Removed auto-open DevTools on launch (still accessible via View menu)
 
 ---
 
