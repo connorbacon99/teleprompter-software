@@ -101,9 +101,6 @@ function createOperatorWindow() {
   // Load from localhost for better API compatibility
   operatorWindow.loadURL(`http://127.0.0.1:${localServerPort}/operator.html`);
 
-  // Open DevTools for debugging Voice Follow
-  operatorWindow.webContents.openDevTools();
-
   operatorWindow.on('closed', () => {
     operatorWindow = null;
     if (teleprompterWindow) {
@@ -855,7 +852,15 @@ async function extractPowerPointNotes(filePath) {
       .filter(text => text.trim() !== String(noteFile.slideNum));
 
     // Skip slides with no notes
-    const noteText = texts.join(' ').trim();
+    // Join text intelligently - no space before punctuation
+    let noteText = '';
+    for (const text of texts) {
+      if (noteText && !/^[.,!?;:)}\]'"…]/.test(text) && !/[(\[{'"']$/.test(noteText)) {
+        noteText += ' ';
+      }
+      noteText += text;
+    }
+    noteText = noteText.trim();
     if (noteText) {
       results.push(`[Slide ${noteFile.slideNum}] ${noteText}`);
     }

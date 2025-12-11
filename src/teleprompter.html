@@ -355,11 +355,38 @@
     }
 
     // Receive script from operator
+    let hasLoadedScript = false;
     ipcRenderer.on('update-script', (event, data) => {
-      scriptText.textContent = data.text || 'No script loaded';
-      calculateScrollHeight();
+      // Calculate current position percentage before updating
       const containerHeight = container.clientHeight;
-      currentPosition = containerHeight * 0.5;
+      const oldScrollHeight = calculateScrollHeight();
+      const startY = containerHeight * 0.5;
+      const endY = startY - oldScrollHeight;
+      const range = startY - endY;
+      const currentPercent = range > 0 ? ((startY - currentPosition) / range) * 100 : 0;
+
+      // Update script text
+      scriptText.textContent = data.text || 'No script loaded';
+
+      // Recalculate scroll height with new content
+      const newScrollHeight = calculateScrollHeight();
+      const newEndY = startY - newScrollHeight;
+      const newRange = startY - newEndY;
+
+      // Use initial position if provided (when opening display), otherwise preserve or reset
+      if (data.initialPosition !== undefined) {
+        // Jump directly to the specified position
+        currentPosition = startY - (data.initialPosition / 100) * newRange;
+        hasLoadedScript = true;
+      } else if (!hasLoadedScript) {
+        // First load without position - start at beginning
+        currentPosition = containerHeight * 0.5;
+        hasLoadedScript = true;
+      } else {
+        // Script edit - preserve same percentage position
+        currentPosition = startY - (currentPercent / 100) * newRange;
+      }
+
       scriptWrapper.style.transform = `translate3d(0, ${currentPosition}px, 0)`;
     });
 

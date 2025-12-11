@@ -394,12 +394,16 @@
       }
     });
 
-    // Send script to teleprompter
-    function sendScript() {
-      ipcRenderer.send('send-script', {
+    // Send script to teleprompter (with optional initial position)
+    function sendScript(includePosition = false) {
+      const data = {
         text: scriptText.value,
         cueMarkers: cueMarkers
-      });
+      };
+      if (includePosition) {
+        data.initialPosition = parseInt(positionSlider.value);
+      }
+      ipcRenderer.send('send-script', data);
     }
 
     // Open teleprompter display
@@ -407,7 +411,8 @@
       const displayId = displaySelect.value ? parseInt(displaySelect.value) : null;
       currentDisplayId = await ipcRenderer.invoke('open-teleprompter', displayId);
       setTimeout(() => {
-        sendScript();
+        // Include initial position so display starts where monitor preview is
+        sendScript(true);
         sendSettings();
       }, 500);
     });
@@ -464,8 +469,11 @@
         if (!isOpen) {
           const displayId = displaySelect.value ? parseInt(displaySelect.value) : null;
           currentDisplayId = await ipcRenderer.invoke('open-teleprompter', displayId);
-          sendScript();
-          sendSettings();
+          // Wait for teleprompter window to be ready before sending script with position
+          setTimeout(() => {
+            sendScript(true);
+            sendSettings();
+          }, 500);
         }
       }
 
@@ -482,7 +490,8 @@
           cancelMonitorCountdown();
         }
         updatePlayButton();
-        sendPlaybackState();
+        // Always include position so playback continues from current spot
+        sendPlaybackState(true);
       }
     });
 
@@ -808,6 +817,13 @@
             // Focus and select in editor
             scriptText.focus();
             scriptText.setSelectionRange(startIndex, startIndex + selectedText.length);
+
+            // Scroll the selection into view (center it in the textarea)
+            const textBeforeSelection = scriptText.value.substring(0, startIndex);
+            const linesBefore = textBeforeSelection.split('\n').length;
+            const lineHeight = parseInt(window.getComputedStyle(scriptText).lineHeight) || 20;
+            const targetScroll = (linesBefore * lineHeight) - (scriptText.clientHeight / 2);
+            scriptText.scrollTop = Math.max(0, targetScroll);
           }
         }
       }
@@ -924,7 +940,32 @@
       });
     })();
 
-    // Scroll in monitor viewport to change position
+    // Smooth scroll in monitor viewport to change position
+    let targetPosition = parseFloat(positionSlider.value) || 0;
+    let currentDisplayPosition = targetPosition;
+    let scrollAnimationId = null;
+
+    function animateScroll() {
+      const diff = targetPosition - currentDisplayPosition;
+      if (Math.abs(diff) < 0.01) {
+        // Close enough, snap to target
+        currentDisplayPosition = targetPosition;
+        scrollAnimationId = null;
+      } else {
+        // Ease toward target (0.15 = smoothing factor, lower = smoother)
+        currentDisplayPosition += diff * 0.15;
+        scrollAnimationId = requestAnimationFrame(animateScroll);
+      }
+
+      // Update display
+      const displayPos = Math.min(100, Math.max(0, currentDisplayPosition));
+      positionSlider.value = displayPos;
+      positionValue.textContent = Math.round(displayPos) + '%';
+      applyMonitorPosition(displayPos);
+      monitorProgressBar.style.width = displayPos + '%';
+      monitorPercent.textContent = Math.round(displayPos) + '%';
+    }
+
     monitorContainer.addEventListener('wheel', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -932,25 +973,23 @@
       // Skip if no actual scroll movement
       if (e.deltaY === 0) return;
 
-      // Use actual deltaY for smoother scrolling, normalize for trackpad vs mouse
-      // Positive deltaY = scroll down = increase position (later in script)
-      // Negative deltaY = scroll up = decrease position (earlier in script)
-      const sensitivity = 0.1;
-      const delta = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY) * sensitivity, 2);
-      const currentPos = parseFloat(positionSlider.value) || 0;
-      const newPosition = Math.min(100, Math.max(0, currentPos + delta));
+      // Accumulate scroll input toward target position
+      const sensitivity = 0.08;
+      const maxDelta = 2;
+      const rawDelta = e.deltaY * sensitivity;
+      const delta = Math.sign(rawDelta) * Math.min(Math.abs(rawDelta), maxDelta);
+      targetPosition = Math.min(100, Math.max(0, targetPosition + delta));
 
-      positionSlider.value = newPosition;
-      positionValue.textContent = Math.round(newPosition) + '%';
-      applyMonitorPosition(newPosition);
-      monitorProgressBar.style.width = newPosition + '%';
-      monitorPercent.textContent = Math.round(newPosition) + '%';
+      // Start animation if not already running
+      if (!scrollAnimationId) {
+        scrollAnimationId = requestAnimationFrame(animateScroll);
+      }
 
-      // Debounce sending to teleprompter to avoid too many updates
+      // Debounce sending to teleprompter
       clearTimeout(monitorContainer.scrollTimeout);
       monitorContainer.scrollTimeout = setTimeout(() => {
         sendPlaybackState(true);
-      }, 50);
+      }, 100);
     }, { passive: false });
 
     // Initial
