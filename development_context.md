@@ -480,6 +480,70 @@ teleprompter-software/
 
 ---
 
+### 2025-12-11 - Phase 1: Multi-Script Recording & Problem Markers
+- Added multi-script session management:
+  - Tab-based script switching UI with Discord-inspired design
+  - Each script maintains separate content, markers, and metadata
+  - Session-level state management with unique session IDs
+- Implemented problem marker system:
+  - 4 marker types: Retake, Issue, Good, Note
+  - Timestamp tracking at session and script level
+  - Position tracking through script (percentage)
+  - Visual feedback on marker creation
+- Added recording timer system:
+  - Session timer (total recording time across all scripts)
+  - Script timer (resets when switching scripts)
+  - Visual recording indicator with pulsing animation
+- Implemented auto-save functionality:
+  - 30-second save interval
+  - 5-file rotation to conserve disk space
+  - Saves to `.autosave/` directory in app data
+  - Visual indicator showing save status
+- Created export system for editing guides:
+  - TXT format: Human-readable with formatted timeline
+  - CSV format: Spreadsheet-compatible for video editing
+  - Includes all markers, timestamps, and summary statistics
+- UI modernization with Discord-inspired design:
+  - Updated color scheme for better contrast (#1e1f22, #2b2d31, #313338)
+  - Glassmorphism effects with backdrop blur
+  - Smooth animations and hover states
+  - Fixed black plus button visibility issue
+- Added IPC handlers in main.js:
+  - `autosave-session`: Handles session saves with rotation
+  - `save-text-file`: Handles TXT/CSV exports with file dialog
+
+---
+
+### 2025-12-11 - Phase 2A: Presentation Mode Features
+- Added slide range management:
+  - Editable slide range indicator on each script tab (📊 icon)
+  - Supports flexible formats: "1-10", "5", "1-3, 8-10"
+  - Smooth scale animation and purple accent on hover
+  - Persists in auto-saves and appears in exports
+- Implemented slide transition marker:
+  - New 5th marker type: 🎞️ "Slide Change"
+  - Prompts for slide number when clicked
+  - Purple accent styling to distinguish from other markers
+  - Stores slide number with timestamp
+- Enhanced export with slide timeline:
+  - Slide transitions prominently displayed in exports
+  - TXT: Shows "→ Slide #" for transitions
+  - CSV: Added "Slide Number" column
+  - Markers sorted chronologically
+  - Summary includes slide transition count
+- Added per-slide timing statistics:
+  - Calculates duration between slide transitions
+  - Performance indicators: ✓ Normal, ⚡ Quick, ⚠️ Slow
+  - Shows problems (retakes/issues) during each slide
+  - Exports "SLIDE-BY-SLIDE TIMING ANALYSIS" section
+  - Compares against 1.5-minute average per slide
+- Created comprehensive documentation:
+  - PHASE1_IMPLEMENTATION.md: Phase 1 features and testing
+  - PHASE2_PLAN.md: Phase 2 roadmap and architecture
+  - PHASE2A_IMPLEMENTATION.md: Presentation Mode features
+
+---
+
 ## Codebase Cleanup Plan (Pre-v1.0.2 Release)
 
 ### Phase 1: HIGH PRIORITY - Bug Fixes & Critical Issues (COMPLETED)

@@ -15,15 +15,14 @@
     const positionSlider = document.getElementById('positionSlider');
     const fontFamilySelect = document.getElementById('fontFamilySelect');
     const fontSizeInput = document.getElementById('fontSizeInput');
+    const fontSizeValue = document.getElementById('fontSizeValue');
     const textColorInput = document.getElementById('textColorInput');
     const bgColorInput = document.getElementById('bgColorInput');
     const mirrorCheckbox = document.getElementById('mirrorCheckbox');
     const flipCheckbox = document.getElementById('flipCheckbox');
-    const playPauseBtn = document.getElementById('playPauseBtn');
-    const playIcon = document.getElementById('playIcon');
-    const playTextEl = document.getElementById('playText');
     const countdownCheckbox = document.getElementById('countdownCheckbox');
     const countdownSeconds = document.getElementById('countdownSeconds');
+    const countdownRow = document.getElementById('countdownRow');
     const cueList = document.getElementById('cueList');
 
     // Helper to set textarea value while preserving undo stack
@@ -32,6 +31,10 @@
       textarea.select();
       document.execCommand('insertText', false, newValue);
     }
+
+    // Initialize voice follow reset function (will be properly defined later in voice follow section)
+    // This stub prevents race condition when sendSettings() is called during initialization
+    window.voiceFollowReset = function() {};
 
     // Monitor elements
     const monitorContainer = document.getElementById('monitorContainer');
@@ -57,6 +60,1118 @@
     let monitorPosition = 0;
     let teleprompterDimensions = { width: 1920, height: 1080 }; // Updated when teleprompter opens
     let monitorCountdownInterval = null;
+    // Monitor scroll animation state
+    let targetPosition = 0;
+    let currentDisplayPosition = 0;
+    let scrollAnimationId = null;
+
+    // ============================================
+    // PHASE 1: MULTI-SCRIPT SESSION MANAGEMENT
+    // ============================================
+
+    // Phase 1 Elements
+    const scriptTabs = document.getElementById('scriptTabs');
+    const addScriptTab = document.getElementById('addScriptTab');
+    const markerToolbar = document.getElementById('markerToolbar');
+    const recordingStatus = document.getElementById('recordingStatus');
+    const sessionTimer = document.getElementById('sessionTimer');
+    const scriptTimer = document.getElementById('scriptTimer');
+    const autosaveIndicator = document.getElementById('autosaveIndicator');
+    const autosaveText = document.getElementById('autosaveText');
+    const autosaveSpinner = document.getElementById('autosaveSpinner');
+    const autosaveCheckmark = document.getElementById('autosaveCheckmark');
+    const markerTimeline = document.getElementById('markerTimeline');
+    const markerTimelineContent = document.getElementById('markerTimelineContent');
+    const markerCount = document.getElementById('markerCount');
+    const markerDuration = document.getElementById('markerDuration');
+    const controlPanel = document.querySelector('.control-panel');
+    const controlPanelHeader = document.getElementById('controlPanelHeader');
+    const showTimelineBtn = document.getElementById('showTimelineBtn');
+    const showControlsBtn = document.getElementById('showControlsBtn');
+
+    // Multi-script session state
+    let scripts = [];
+    let currentScriptId = 'main';
+    let sessionId = Date.now().toString();
+    let nextScriptId = 1;
+
+    // Recording state
+    let isRecording = false;
+    let sessionStartTime = null;
+    let scriptStartTime = null;
+    let timerInterval = null;
+
+    // Problem markers
+    let problemMarkers = [];
+
+    // Auto-save state
+    let autoSaveInterval = null;
+    let autoSaveQueue = [];
+    const MAX_AUTOSAVES = 5;
+    const AUTOSAVE_INTERVAL = 30000; // 30 seconds
+
+    // Initialize with default script
+    scripts.push({
+      id: 'main',
+      name: 'Untitled',
+      content: '',
+      cueMarkers: [],
+      markers: [],
+      completed: false
+    });
+
+    // Session Management Functions
+    function switchToScript(scriptId) {
+      // Save current script state (includes markers)
+      saveCurrentScriptState();
+
+      // Auto-save timeline to disk if there are markers
+      const currentScript = scripts.find(s => s.id === currentScriptId);
+      console.log('🔍 Checking auto-save:', {
+        hasScript: !!currentScript,
+        hasMarkers: currentScript?.markers?.length > 0,
+        markerCount: currentScript?.markers?.length || 0,
+        scriptName: currentScript?.name
+      });
+
+      if (currentScript && currentScript.markers && currentScript.markers.length > 0) {
+        console.log('✅ Triggering auto-save for:', currentScript.name);
+        autoSaveTimelineToFile(currentScript);
+      } else {
+        console.log('⏭️ Skipping auto-save (no markers)');
+      }
+
+      // Switch to new script
+      currentScriptId = scriptId;
+      const script = scripts.find(s => s.id === scriptId);
+
+      if (script) {
+        // Load script content
+        scriptText.value = script.content;
+        cueMarkers = script.cueMarkers || [];
+
+        // Load script markers
+        problemMarkers = script.markers ? [...script.markers] : [];
+        console.log(`📂 Loaded ${problemMarkers.length} markers for script "${script.name}"`);
+
+        // Update UI
+        updateScriptTabs();
+        updateCharCount();
+        renderCueList();
+        sendScript();
+        updateMonitorText();
+        updateMonitorPosition({ percent: 0 });
+
+        // Update file name display
+        fileName.textContent = script.name;
+
+        // Update marker timeline UI
+        updateMarkerTimeline();
+
+        // Reset script timer
+        if (isRecording) {
+          scriptStartTime = Date.now();
+        }
+      }
+    }
+
+    function saveCurrentScriptState() {
+      const script = scripts.find(s => s.id === currentScriptId);
+      if (script) {
+        script.content = scriptText.value;
+        script.cueMarkers = cueMarkers;
+        // Save current problemMarkers to this script
+        script.markers = [...problemMarkers]; // Create a copy
+        console.log(`💾 Saved ${problemMarkers.length} markers for script "${script.name}"`);
+      }
+    }
+
+    function addNewScript() {
+      const scriptId = `script-${nextScriptId++}`;
+      scripts.push({
+        id: scriptId,
+        name: `Script ${nextScriptId}`,
+        content: '',
+        cueMarkers: [],
+        markers: [],
+        completed: false
+      });
+
+      updateScriptTabs();
+      switchToScript(scriptId);
+    }
+
+    function removeScript(scriptId) {
+      if (scripts.length <= 1) {
+        alert('Cannot remove the last script');
+        return;
+      }
+
+      const index = scripts.findIndex(s => s.id === scriptId);
+      if (index !== -1) {
+        scripts.splice(index, 1);
+
+        // Switch to another script
+        if (currentScriptId === scriptId) {
+          const newScript = scripts[Math.max(0, index - 1)];
+          switchToScript(newScript.id);
+        }
+
+        updateScriptTabs();
+      }
+    }
+
+    // Edit script name (using modal instead of prompt)
+    function editScriptName(scriptId) {
+      console.log('editScriptName called for:', scriptId);
+      const script = scripts.find(s => s.id === scriptId);
+      if (!script) {
+        console.error('Script not found:', scriptId);
+        return;
+      }
+
+      // Show modal
+      const modal = document.getElementById('renameModal');
+      const input = document.getElementById('renameInput');
+      const saveBtn = document.getElementById('renameSaveBtn');
+      const cancelBtn = document.getElementById('renameCancelBtn');
+
+      console.log('🔍 Modal elements found:', { modal: !!modal, input: !!input, saveBtn: !!saveBtn, cancelBtn: !!cancelBtn });
+
+      if (!modal || !input || !saveBtn || !cancelBtn) {
+        console.error('❌ Modal elements missing! Cannot show rename dialog.');
+        alert('Rename modal not loaded. Please refresh the page.');
+        return;
+      }
+
+      console.log('✅ Showing rename modal');
+      input.value = script.name;
+      modal.classList.add('visible');
+      setTimeout(() => {
+        input.focus();
+        input.select();
+      }, 50);
+
+      // Handle save
+      const handleSave = () => {
+        const newName = input.value.trim();
+        if (newName !== '') {
+          script.name = newName;
+          updateScriptTabs();
+          if (scriptId === currentScriptId) {
+            fileName.textContent = script.name;
+          }
+          console.log('Script renamed to:', script.name);
+        }
+        modal.classList.remove('visible');
+        cleanup();
+      };
+
+      const handleCancel = () => {
+        modal.classList.remove('visible');
+        cleanup();
+      };
+
+      const cleanup = () => {
+        saveBtn.removeEventListener('click', handleSave);
+        cancelBtn.removeEventListener('click', handleCancel);
+        input.removeEventListener('keydown', handleKeyDown);
+        modal.removeEventListener('click', handleOverlayClick);
+      };
+
+      const handleKeyDown = (e) => {
+        if (e.key === 'Enter') handleSave();
+        else if (e.key === 'Escape') handleCancel();
+      };
+
+      const handleOverlayClick = (e) => {
+        if (e.target === modal) handleCancel();
+      };
+
+      saveBtn.addEventListener('click', handleSave);
+      cancelBtn.addEventListener('click', handleCancel);
+      input.addEventListener('keydown', handleKeyDown);
+      modal.addEventListener('click', handleOverlayClick);
+    }
+
+    function updateScriptTabs() {
+      const tabsContainer = scriptTabs.querySelector('.script-tabs') || scriptTabs;
+
+      // Clear existing tabs except add button
+      const existingTabs = tabsContainer.querySelectorAll('.script-tab');
+      existingTabs.forEach(tab => tab.remove());
+
+      // Create tabs for each script
+      scripts.forEach(script => {
+        const tab = document.createElement('div');
+        tab.className = `script-tab${script.id === currentScriptId ? ' active' : ''}`;
+        tab.dataset.scriptId = script.id;
+
+        // Check if has markers
+        if (script.markers && script.markers.length > 0) {
+          tab.classList.add('has-markers');
+        }
+        if (script.completed) {
+          tab.classList.add('completed');
+        }
+
+        tab.innerHTML = `
+          <span class="script-tab-name">${script.name}</span>
+          <button class="script-tab-edit" title="Rename script">
+            <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+          </button>
+          <div class="script-tab-status"></div>
+          <button class="script-tab-close" onclick="event.stopPropagation();">
+            <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          </button>
+        `;
+
+        // Edit button click to rename
+        const editBtn = tab.querySelector('.script-tab-edit');
+        if (editBtn) {
+          editBtn.addEventListener('click', (e) => {
+            console.log('Edit button clicked:', script.id);
+            e.stopPropagation();
+            editScriptName(script.id);
+          });
+        } else {
+          console.error('Edit button not found for script:', script.id);
+        }
+
+        // Tab click switches script (but not if clicking on edit/close buttons)
+        tab.addEventListener('click', (e) => {
+          const isButton = e.target.closest('.script-tab-edit, .script-tab-close');
+          if (!isButton) {
+            switchToScript(script.id);
+          }
+        });
+
+        tab.querySelector('.script-tab-close').addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (confirm(`Remove "${script.name}"?`)) {
+            removeScript(script.id);
+          }
+        });
+
+        tabsContainer.insertBefore(tab, addScriptTab);
+      });
+    }
+
+    // Add script tab click handler
+    addScriptTab.addEventListener('click', addNewScript);
+
+    // ============================================
+    // PROBLEM MARKERS WITH TIMESTAMPS
+    // ============================================
+
+    function addProblemMarker(type, autoNote = null) {
+      console.log('📌 addProblemMarker called:', { type, autoNote, isRecording });
+
+      if (!isRecording) {
+        startRecording();
+      }
+
+      const currentScript = scripts.find(s => s.id === currentScriptId);
+      if (!currentScript) {
+        console.error('❌ No current script found');
+        return;
+      }
+
+      // For note type, show modal first (unless it's an automatic note)
+      if (type === 'note' && !autoNote) {
+        console.log('📝 Showing note modal for manual note');
+        showNoteModal();
+        return;
+      }
+
+      // For retake type, show modal first (unless it's an automatic retake)
+      if (type === 'retake' && !autoNote) {
+        console.log('🔴 Showing retake modal');
+        showRetakeModal();
+        return;
+      }
+
+      console.log('✅ Creating marker with autoNote:', autoNote);
+
+      // For other types (playback-started, playback-stopped), create marker immediately
+      // If autoNote is provided (for automatic markers), use it
+      createMarker(type, autoNote || '', null);
+    }
+
+    function createMarker(type, note, slideNumber) {
+      const currentScript = scripts.find(s => s.id === currentScriptId);
+      if (!currentScript) return;
+
+      const sessionTime = sessionStartTime ? Date.now() - sessionStartTime : 0;
+      const scriptTime = scriptStartTime ? Date.now() - scriptStartTime : 0;
+
+      const marker = {
+        id: Date.now().toString(),
+        type: type,
+        timestamp: Date.now(),
+        sessionTime: sessionTime,
+        scriptTime: scriptTime,
+        scriptId: currentScriptId,
+        scriptName: currentScript.name,
+        position: monitorPosition,
+        note: note || '',
+        slideNumber: slideNumber
+      };
+
+      problemMarkers.push(marker);
+      currentScript.markers = currentScript.markers || [];
+      currentScript.markers.push(marker);
+
+      console.log('✅ Marker added:', {
+        type: marker.type,
+        slideNumber: marker.slideNumber,
+        scriptTime: formatTime(marker.scriptTime),
+        sessionTime: formatTime(marker.sessionTime),
+        note: marker.note,
+        totalMarkers: problemMarkers.length
+      });
+
+      updateScriptTabs();
+      updateMarkerTimeline();
+      showMarkerFeedback(type);
+    }
+
+    function showNoteModal() {
+      const modal = document.getElementById('noteModal');
+      const input = document.getElementById('noteInput');
+      const saveBtn = document.getElementById('noteSaveBtn');
+      const cancelBtn = document.getElementById('noteCancelBtn');
+
+      input.value = '';
+      modal.classList.add('visible');
+      setTimeout(() => {
+        input.focus();
+      }, 50);
+
+      const handleSave = () => {
+        const note = input.value.trim();
+        if (note) {
+          createMarker('note', note, null);
+        }
+        modal.classList.remove('visible');
+        cleanup();
+      };
+
+      const handleCancel = () => {
+        modal.classList.remove('visible');
+        cleanup();
+      };
+
+      const cleanup = () => {
+        saveBtn.removeEventListener('click', handleSave);
+        cancelBtn.removeEventListener('click', handleCancel);
+        input.removeEventListener('keydown', handleKeyDown);
+        modal.removeEventListener('click', handleOverlayClick);
+      };
+
+      const handleKeyDown = (e) => {
+        if (e.key === 'Enter') handleSave();
+        else if (e.key === 'Escape') handleCancel();
+      };
+
+      const handleOverlayClick = (e) => {
+        if (e.target === modal) handleCancel();
+      };
+
+      saveBtn.addEventListener('click', handleSave);
+      cancelBtn.addEventListener('click', handleCancel);
+      input.addEventListener('keydown', handleKeyDown);
+      modal.addEventListener('click', handleOverlayClick);
+    }
+
+    function showRetakeModal() {
+      // Auto-pause teleprompter when marking retake
+      if (isPlaying) {
+        console.log('🔴 Retake clicked - auto-pausing teleprompter');
+        isPlaying = false;
+        cancelMonitorCountdown();
+        updatePlayButton();
+        sendPlaybackState();
+
+        // Add automatic "Playback Stopped" marker for video editing
+        if (isRecording) {
+          addProblemMarker('playback-stopped', '⏸️ Playback Stopped');
+        }
+      }
+
+      const modal = document.getElementById('retakeModal');
+      const input = document.getElementById('retakeInput');
+      const saveBtn = document.getElementById('retakeSaveBtn');
+      const cancelBtn = document.getElementById('retakeCancelBtn');
+
+      input.value = '';
+      modal.classList.add('visible');
+      setTimeout(() => {
+        input.focus();
+      }, 50);
+
+      const handleSave = () => {
+        const startingAt = input.value.trim();
+        if (startingAt) {
+          createMarker('retake', `Starting at: ${startingAt}`, null);
+        } else {
+          // If no starting point provided, just mark as retake without location
+          createMarker('retake', 'Retake needed', null);
+        }
+        modal.classList.remove('visible');
+        cleanup();
+      };
+
+      const handleCancel = () => {
+        modal.classList.remove('visible');
+        cleanup();
+      };
+
+      const cleanup = () => {
+        saveBtn.removeEventListener('click', handleSave);
+        cancelBtn.removeEventListener('click', handleCancel);
+        input.removeEventListener('keydown', handleKeyDown);
+        modal.removeEventListener('click', handleOverlayClick);
+      };
+
+      const handleKeyDown = (e) => {
+        if (e.key === 'Enter') handleSave();
+        else if (e.key === 'Escape') handleCancel();
+      };
+
+      const handleOverlayClick = (e) => {
+        if (e.target === modal) handleCancel();
+      };
+
+      saveBtn.addEventListener('click', handleSave);
+      cancelBtn.addEventListener('click', handleCancel);
+      input.addEventListener('keydown', handleKeyDown);
+      modal.addEventListener('click', handleOverlayClick);
+    }
+
+    function showMarkerFeedback(type) {
+      const emoji = {
+        'retake': '🔴',
+        'stumble': '⚠️',
+        'note': '📝',
+        'playback-started': '▶️',
+        'playback-stopped': '⏸️'
+      };
+
+      console.log(`${emoji[type] || '•'} ${type.toUpperCase()} marker at ${formatTime(scriptStartTime ? Date.now() - scriptStartTime : 0)}`);
+    }
+
+    // Marker button handlers
+    document.getElementById('markerRetake').addEventListener('click', () => addProblemMarker('retake'));
+    document.getElementById('markerStumble').addEventListener('click', () => addProblemMarker('stumble'));
+    document.getElementById('markerNote').addEventListener('click', () => addProblemMarker('note'));
+
+    // ============================================
+    // RECORDING TIMER
+    // ============================================
+
+    function startRecording() {
+      if (isRecording) {
+        console.log('Recording already active');
+        return;
+      }
+
+      console.log('🔴 Starting recording session...');
+      isRecording = true;
+      sessionStartTime = Date.now();
+      scriptStartTime = Date.now();
+
+      // Update button UI
+      toggleRecordingBtn.innerHTML = `
+        <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12"/></svg>
+        Stop Recording
+      `;
+      toggleRecordingBtn.classList.remove('success');
+      toggleRecordingBtn.classList.add('danger');
+
+      // Show UI elements
+      recordingStatus.classList.add('active');
+      markerToolbar.style.display = 'flex';
+      controlPanelHeader.style.display = 'flex';
+      showTimeline(); // Switch to timeline view
+      console.log('Recording UI elements shown');
+
+      // Start timer
+      timerInterval = setInterval(updateTimers, 1000);
+      updateTimers();
+      updateMarkerTimeline();
+      console.log('Recording started - Session ID:', sessionId);
+    }
+
+    function stopRecording() {
+      console.log('⏹️ Stopping recording session...');
+      isRecording = false;
+
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+
+      // Update button UI
+      toggleRecordingBtn.innerHTML = `
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>
+        Start Recording
+      `;
+      toggleRecordingBtn.classList.remove('danger');
+      toggleRecordingBtn.classList.add('success');
+
+      // Hide UI elements and switch back to controls
+      recordingStatus.classList.remove('active');
+      markerToolbar.style.display = 'none';
+      controlPanelHeader.style.display = 'none';
+      showControls(); // Switch back to controls view
+      console.log('Recording stopped. Total markers:', problemMarkers.length);
+
+      // Show export reminder modal
+      showExportTimelineReminder();
+    }
+
+    function updateTimers() {
+      if (!isRecording) return;
+
+      const sessionTime = sessionStartTime ? Date.now() - sessionStartTime : 0;
+      const scriptTime = scriptStartTime ? Date.now() - scriptStartTime : 0;
+
+      sessionTimer.textContent = formatTime(sessionTime);
+      scriptTimer.textContent = formatTimeShort(scriptTime);
+    }
+
+    function formatTime(ms) {
+      const seconds = Math.floor(ms / 1000);
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      const secs = seconds % 60;
+      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    function formatTimeShort(ms) {
+      const seconds = Math.floor(ms / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    // ============================================
+    // MARKER TIMELINE UI
+    // ============================================
+
+    function updateMarkerTimeline() {
+      // Update stats
+      markerCount.textContent = `${problemMarkers.length} marker${problemMarkers.length !== 1 ? 's' : ''}`;
+      if (sessionStartTime) {
+        markerDuration.textContent = formatTime(Date.now() - sessionStartTime);
+      }
+
+      // Sort markers by session time
+      const sortedMarkers = [...problemMarkers].sort((a, b) => a.sessionTime - b.sessionTime);
+
+      // Clear content
+      markerTimelineContent.innerHTML = '';
+
+      if (sortedMarkers.length === 0) {
+        // Show empty state
+        markerTimelineContent.innerHTML = `
+          <div class="marker-timeline-empty">
+            <svg viewBox="0 0 24 24" style="width: 48px; height: 48px; opacity: 0.3; margin-bottom: 12px;">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
+            <p>No markers yet</p>
+            <span>Click marker buttons below to add timestamps</span>
+          </div>
+        `;
+        return;
+      }
+
+      // Render markers
+      sortedMarkers.forEach(marker => {
+        const item = document.createElement('div');
+        item.className = 'marker-timeline-item';
+        item.dataset.markerId = marker.id;
+
+        const emoji = {
+          'retake': '🔴',
+          'stumble': '⚠️',
+          'note': '📝',
+          'playback-started': '▶️',
+          'playback-stopped': '⏸️'
+        };
+
+        const typeClass = marker.type;
+        const typeName = marker.type.replace('-', ' ').toUpperCase();
+
+        let detailsHTML = '';
+        if (marker.slideNumber) {
+          detailsHTML = `<div class="marker-item-details">Slide ${marker.slideNumber}</div>`;
+        }
+        if (marker.note && marker.type !== 'slide-change') {
+          detailsHTML += `<div class="marker-item-note">${marker.note}</div>`;
+        }
+
+        item.innerHTML = `
+          <div class="marker-item-header">
+            <span class="marker-item-icon">${emoji[marker.type] || '•'}</span>
+            <span class="marker-item-type ${typeClass}">${typeName}</span>
+            <span class="marker-item-time">${formatTime(marker.scriptTime)}</span>
+          </div>
+          ${detailsHTML}
+          <div class="marker-item-script">
+            <svg viewBox="0 0 24 24" style="width: 12px; height: 12px; fill: currentColor;">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>
+            </svg>
+            ${marker.scriptName}
+          </div>
+        `;
+
+        markerTimelineContent.appendChild(item);
+      });
+    }
+
+    // ============================================
+    // CONTROL PANEL / TIMELINE TOGGLE
+    // ============================================
+
+    function showTimeline() {
+      markerTimeline.classList.add('active');
+      // Hide control panel header (it has "Show Timeline" button - not needed when timeline is visible)
+      // The timeline has its own header with "Show Controls" button
+      controlPanelHeader.style.display = 'none';
+      document.querySelectorAll('.control-section').forEach(section => {
+        section.style.display = 'none';
+      });
+      document.querySelector('.keyboard-hints').style.display = 'none';
+    }
+
+    function showControls() {
+      markerTimeline.classList.remove('active');
+      // Show control panel header (it has "Show Timeline" button)
+      controlPanelHeader.style.display = 'flex';
+      document.querySelectorAll('.control-section').forEach(section => {
+        section.style.display = 'block';
+      });
+      document.querySelector('.keyboard-hints').style.display = 'block';
+    }
+
+    // Toggle buttons
+    showTimelineBtn.addEventListener('click', showTimeline);
+    showControlsBtn.addEventListener('click', showControls);
+
+    // ============================================
+    // AUTO-SAVE SYSTEM
+    // ============================================
+
+    function startAutoSave() {
+      if (autoSaveInterval) return;
+
+      autoSaveInterval = setInterval(performAutoSave, AUTOSAVE_INTERVAL);
+    }
+
+    async function performAutoSave() {
+      // Save current state
+      saveCurrentScriptState();
+
+      // Show saving indicator
+      autosaveIndicator.classList.add('saving');
+      autosaveSpinner.style.display = 'block';
+      autosaveCheckmark.style.display = 'none';
+      autosaveText.textContent = 'Auto-saving...';
+
+      // Create autosave data
+      const autosaveData = {
+        timestamp: Date.now(),
+        sessionId: sessionId,
+        scripts: scripts,
+        problemMarkers: problemMarkers,
+        currentScriptId: currentScriptId
+      };
+
+      try {
+        // Save to file
+        const result = await ipcRenderer.invoke('autosave-session', autosaveData);
+
+        if (result.success) {
+          // Show success
+          autosaveSpinner.style.display = 'none';
+          autosaveCheckmark.style.display = 'inline';
+          autosaveText.textContent = 'Saved';
+
+          // Hide after 2 seconds
+          setTimeout(() => {
+            autosaveIndicator.classList.remove('saving');
+          }, 2000);
+        }
+      } catch (error) {
+        console.error('Auto-save failed:', error);
+        autosaveIndicator.classList.remove('saving');
+      }
+    }
+
+    // Start auto-save on load
+    startAutoSave();
+
+    // ============================================
+    // RECORDING TOGGLE
+    // ============================================
+
+    const toggleRecordingBtn = document.getElementById('toggleRecordingBtn');
+
+    toggleRecordingBtn.addEventListener('click', () => {
+      if (isRecording) {
+        // Show confirmation modal before stopping
+        showStopRecordingConfirmation();
+      } else {
+        startRecording();
+      }
+    });
+
+    function showStopRecordingConfirmation() {
+      const modal = document.getElementById('stopRecordingModal');
+      const confirmBtn = document.getElementById('stopRecordingConfirmBtn');
+      const cancelBtn = document.getElementById('stopRecordingCancelBtn');
+
+      modal.classList.add('visible');
+
+      const handleConfirm = () => {
+        modal.classList.remove('visible');
+        cleanup();
+        stopRecording();
+      };
+
+      const handleCancel = () => {
+        modal.classList.remove('visible');
+        cleanup();
+      };
+
+      const cleanup = () => {
+        confirmBtn.removeEventListener('click', handleConfirm);
+        cancelBtn.removeEventListener('click', handleCancel);
+        modal.removeEventListener('click', handleOverlayClick);
+      };
+
+      const handleOverlayClick = (e) => {
+        if (e.target === modal) handleCancel();
+      };
+
+      confirmBtn.addEventListener('click', handleConfirm);
+      cancelBtn.addEventListener('click', handleCancel);
+      modal.addEventListener('click', handleOverlayClick);
+    }
+
+    function showExportTimelineReminder() {
+      const modal = document.getElementById('exportTimelineReminderModal');
+      const exportBtn = document.getElementById('exportReminderExportBtn');
+      const laterBtn = document.getElementById('exportReminderLaterBtn');
+      const markerCountEl = document.getElementById('exportReminderMarkerCount');
+      const durationEl = document.getElementById('exportReminderDuration');
+
+      // Calculate total session time
+      const totalSessionTime = sessionStartTime ? Date.now() - sessionStartTime : 0;
+
+      // Update summary
+      markerCountEl.textContent = `${problemMarkers.length} marker${problemMarkers.length !== 1 ? 's' : ''}`;
+      durationEl.textContent = formatTime(totalSessionTime);
+
+      modal.classList.add('visible');
+
+      const handleExport = () => {
+        modal.classList.remove('visible');
+        cleanup();
+        // Trigger the export guide button
+        document.getElementById('exportGuideBtn').click();
+      };
+
+      const handleLater = () => {
+        modal.classList.remove('visible');
+        cleanup();
+      };
+
+      const cleanup = () => {
+        exportBtn.removeEventListener('click', handleExport);
+        laterBtn.removeEventListener('click', handleLater);
+        modal.removeEventListener('click', handleOverlayClick);
+      };
+
+      const handleOverlayClick = (e) => {
+        if (e.target === modal) handleLater();
+      };
+
+      exportBtn.addEventListener('click', handleExport);
+      laterBtn.addEventListener('click', handleLater);
+      modal.addEventListener('click', handleOverlayClick);
+    }
+
+    // ============================================
+    // AUTO-SAVE TIMELINE TO FILE
+    // ============================================
+
+    async function autoSaveTimelineToFile(script) {
+      if (!script || !script.markers || script.markers.length === 0) {
+        return;
+      }
+
+      console.log(`💾 Auto-saving timeline for "${script.name}" with ${script.markers.length} markers...`);
+
+      // Generate timeline content
+      let output = '';
+      output += `Timeline Auto-Save - ${script.name}\n`;
+      output += `Session: ${sessionId}\n`;
+      output += `Saved: ${new Date().toLocaleString()}\n`;
+      output += `\n${'='.repeat(60)}\n\n`;
+
+      // Sort markers by time
+      const sortedMarkers = [...script.markers].sort((a, b) => a.scriptTime - b.scriptTime);
+
+      sortedMarkers.forEach(marker => {
+        const emoji = {
+          'retake': '🔴 RETAKE',
+          'stumble': '⚠️ STUMBLE',
+          'note': '📝 NOTE',
+          'playback-started': '▶️ PLAYBACK STARTED',
+          'playback-stopped': '⏸️ PLAYBACK STOPPED'
+        };
+
+        output += `${formatTime(marker.scriptTime)} - ${emoji[marker.type] || marker.type.toUpperCase()}`;
+        if (marker.note) {
+          output += ` - "${marker.note}"`;
+        }
+        output += `\n`;
+      });
+
+      output += `\n`;
+
+      // Summary
+      const retakes = sortedMarkers.filter(m => m.type === 'retake').length;
+      const stumbles = sortedMarkers.filter(m => m.type === 'stumble').length;
+      const notes = sortedMarkers.filter(m => m.type === 'note').length;
+      const playbackStarts = sortedMarkers.filter(m => m.type === 'playback-started').length;
+
+      output += `${'-'.repeat(60)}\n`;
+      output += `Summary:\n`;
+      output += `- Retakes Marked: ${retakes}\n`;
+      output += `- Stumbles Marked: ${stumbles}\n`;
+      output += `- Notes: ${notes}\n`;
+      output += `- Playback Segments: ${playbackStarts}\n`;
+      output += `- Total Markers: ${sortedMarkers.length}\n`;
+
+      // Save to file via IPC
+      try {
+        const fileName = `${script.name.replace(/[^a-zA-Z0-9]/g, '_')}_timeline_${sessionId}`;
+        const result = await ipcRenderer.invoke('autosave-timeline', {
+          content: output,
+          fileName: fileName,
+          scriptId: script.id
+        });
+
+        if (result.success) {
+          console.log(`✅ Timeline auto-saved to: ${result.path}`);
+          showAutoSaveNotification(script.name);
+        }
+      } catch (error) {
+        console.error('❌ Auto-save failed:', error);
+      }
+    }
+
+    function showAutoSaveNotification(scriptName) {
+      // Create a subtle notification that fades out
+      const notification = document.createElement('div');
+      notification.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: var(--success);
+        color: white;
+        padding: 12px 20px;
+        border-radius: var(--radius-md);
+        font-size: 12px;
+        font-weight: 600;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 10000;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      `;
+      notification.textContent = `✓ Timeline auto-saved for "${scriptName}"`;
+      document.body.appendChild(notification);
+
+      // Fade in
+      setTimeout(() => {
+        notification.style.opacity = '1';
+      }, 10);
+
+      // Fade out and remove after 3 seconds
+      setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => {
+          document.body.removeChild(notification);
+        }, 300);
+      }, 3000);
+    }
+
+    // ============================================
+    // EXPORT EDITING GUIDE
+    // ============================================
+
+    const exportGuideBtn = document.getElementById('exportGuideBtn');
+
+    exportGuideBtn.addEventListener('click', async () => {
+      // Save current state
+      saveCurrentScriptState();
+
+      // Show export options
+      const format = await showExportDialog();
+      if (!format) return;
+
+      if (format === 'txt') {
+        exportAsText();
+      } else if (format === 'csv') {
+        exportAsCSV();
+      }
+    });
+
+    async function showExportDialog() {
+      return new Promise((resolve) => {
+        const modal = document.getElementById('exportModal');
+        const txtBtn = document.getElementById('exportTxtBtn');
+        const csvBtn = document.getElementById('exportCsvBtn');
+        const cancelBtn = document.getElementById('exportCancelBtn');
+
+        modal.classList.add('visible');
+
+        const handleTxt = () => {
+          modal.classList.remove('visible');
+          cleanup();
+          resolve('txt');
+        };
+
+        const handleCsv = () => {
+          modal.classList.remove('visible');
+          cleanup();
+          resolve('csv');
+        };
+
+        const handleCancel = () => {
+          modal.classList.remove('visible');
+          cleanup();
+          resolve(null);
+        };
+
+        const cleanup = () => {
+          txtBtn.removeEventListener('click', handleTxt);
+          csvBtn.removeEventListener('click', handleCsv);
+          cancelBtn.removeEventListener('click', handleCancel);
+          modal.removeEventListener('click', handleOverlayClick);
+        };
+
+        const handleOverlayClick = (e) => {
+          if (e.target === modal) handleCancel();
+        };
+
+        txtBtn.addEventListener('click', handleTxt);
+        csvBtn.addEventListener('click', handleCsv);
+        cancelBtn.addEventListener('click', handleCancel);
+        modal.addEventListener('click', handleOverlayClick);
+      });
+    }
+
+    async function exportAsText() {
+      let output = '';
+      output += `Video Editing Guide - ${new Date().toLocaleDateString()}\n`;
+      output += `Session: ${sessionId}\n`;
+      output += `Generated: ${new Date().toLocaleString()}\n`;
+      output += `\n${'='.repeat(60)}\n\n`;
+
+      // Group markers by script
+      scripts.forEach(script => {
+        if (!script.markers || script.markers.length === 0) return;
+
+        output += `Script: ${script.name}\n`;
+        output += `${'-'.repeat(60)}\n`;
+
+        // Sort markers by time
+        const sortedMarkers = [...script.markers].sort((a, b) => a.scriptTime - b.scriptTime);
+
+        sortedMarkers.forEach(marker => {
+          const emoji = {
+            'retake': '🔴 RETAKE',
+            'stumble': '⚠️ STUMBLE',
+            'note': '📝 NOTE',
+            'playback-started': '▶️ PLAYBACK STARTED',
+            'playback-stopped': '⏸️ PLAYBACK STOPPED'
+          };
+
+          output += `${formatTime(marker.scriptTime)} - ${emoji[marker.type] || marker.type.toUpperCase()}`;
+          if (marker.note) {
+            output += ` - "${marker.note}"`;
+          }
+          output += `\n`;
+        });
+
+        output += `\n`;
+      });
+
+      // Summary
+      const retakes = problemMarkers.filter(m => m.type === 'retake').length;
+      const stumbles = problemMarkers.filter(m => m.type === 'stumble').length;
+      const notes = problemMarkers.filter(m => m.type === 'note').length;
+      const playbackStarts = problemMarkers.filter(m => m.type === 'playback-started').length;
+      const playbackStops = problemMarkers.filter(m => m.type === 'playback-stopped').length;
+
+      output += `${'='.repeat(60)}\n`;
+      output += `SUMMARY:\n`;
+      output += `- Scripts: ${scripts.length}\n`;
+      output += `- Retakes Marked: ${retakes}\n`;
+      output += `- Stumbles Marked: ${stumbles}\n`;
+      output += `- Notes: ${notes}\n`;
+      output += `- Playback Segments: ${playbackStarts}\n`;
+      if (sessionStartTime) {
+        output += `- Total Duration: ${formatTime(Date.now() - sessionStartTime)}\n`;
+      }
+      output += `${'='.repeat(60)}\n`;
+
+      // Save file
+      const result = await ipcRenderer.invoke('save-text-file', {
+        content: output,
+        defaultName: `Editing-Guide-${Date.now()}.txt`
+      });
+
+      if (result.success) {
+        alert(`Guide exported to:\n${result.filePath}`);
+      }
+    }
+
+    async function exportAsCSV() {
+      let csv = 'Script,Timestamp,Type,Position,Note\n';
+
+      // Sort markers by time
+      const sortedMarkers = [...problemMarkers].sort((a, b) => a.sessionTime - b.sessionTime);
+
+      sortedMarkers.forEach(marker => {
+        const script = scripts.find(s => s.id === marker.scriptId);
+        const scriptName = script ? script.name : 'Unknown';
+        const timestamp = formatTime(marker.scriptTime);
+        const type = marker.type.toUpperCase();
+        const position = `${marker.position.toFixed(1)}%`;
+        const note = `"${(marker.note || '').replace(/"/g, '""')}"`;
+
+        csv += `"${scriptName}",${timestamp},${type},${position},${note}\n`;
+      });
+
+      // Save file
+      const result = await ipcRenderer.invoke('save-text-file', {
+        content: csv,
+        defaultName: `Editing-Guide-${Date.now()}.csv`
+      });
+
+      if (result.success) {
+        alert(`Guide exported to:\n${result.filePath}`);
+      }
+    }
+
+    // Initialize tabs on load
+    updateScriptTabs();
 
     // Run countdown in monitor preview
     function runMonitorCountdown(seconds) {
@@ -96,6 +1211,11 @@
       viewMonitorBtn.classList.remove('active');
       editorView.classList.add('active');
       monitorView.classList.remove('active');
+      // Cancel any running monitor scroll animation when switching away from monitor view
+      if (scrollAnimationId) {
+        cancelAnimationFrame(scrollAnimationId);
+        scrollAnimationId = null;
+      }
     });
 
     viewMonitorBtn.addEventListener('click', () => {
@@ -248,15 +1368,15 @@
       }
     }
 
-    // Tab switching
-    document.querySelectorAll('.tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    // Settings tab switching with dropdown
+    const settingsTabSelect = document.getElementById('settingsTabSelect');
+    if (settingsTabSelect) {
+      settingsTabSelect.addEventListener('change', () => {
+        const selectedTab = settingsTabSelect.value;
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        tab.classList.add('active');
-        document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+        document.getElementById('tab-' + selectedTab).classList.add('active');
       });
-    });
+    }
 
     // Load available displays
     async function loadDisplays() {
@@ -287,6 +1407,9 @@
 
     // Clean up script - remove extra blank lines and bracketed text
     document.getElementById('cleanUpBtn').addEventListener('click', () => {
+      // Save scroll position
+      const scrollTop = scriptText.scrollTop;
+
       let cleaned = scriptText.value
         .replace(/\[.*?\]\s*/g, '') // Remove text in square brackets [like this] and trailing space
         .split('\n')
@@ -298,6 +1421,11 @@
       setTextWithUndo(scriptText, cleaned);
       updateCharCount();
       sendScript();
+
+      // Restore scroll position
+      setTimeout(() => {
+        scriptText.scrollTop = scrollTop;
+      }, 0);
     });
 
     // Open file
@@ -313,22 +1441,14 @@
           renderCueList();
           sendScript();
           updateMonitorText();
-          updateMonitorPosition(0);
+          updateMonitorPosition({ percent: 0 });
         } else {
           alert('Error reading file: ' + result.error);
         }
       }
     });
 
-    // New script
-    document.getElementById('newScriptBtn').addEventListener('click', () => {
-      scriptText.value = '';
-      fileName.textContent = 'Untitled';
-      cueMarkers = [];
-      currentProjectPath = null;
-      renderCueList();
-      updateCharCount();
-    });
+    // New script button removed (now using multi-script tabs with + button)
 
     // Save project
     document.getElementById('saveProjectBtn').addEventListener('click', async () => {
@@ -423,40 +1543,47 @@
     });
 
     // Playback controls
+    const headerPlayPauseBtn = document.getElementById('headerPlayPauseBtn');
+    const headerPlayIcon = document.getElementById('headerPlayIcon');
+    const headerPlayText = document.getElementById('headerPlayText');
+
     function updatePlayButton() {
       // Voice Follow mode: show special state
       if (voiceFollowActive) {
-        playIcon.innerHTML = '<path d="M12 15c1.66 0 2.99-1.34 2.99-3L15 6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 15 6.7 12H5c0 3.42 2.72 6.23 6 6.72V22h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>';
-        playTextEl.textContent = 'Voice Mode';
-        playPauseBtn.classList.remove('primary', 'success');
-        playPauseBtn.style.opacity = '0.6';
-        playPauseBtn.style.cursor = 'not-allowed';
+        headerPlayIcon.innerHTML = '<path d="M12 15c1.66 0 2.99-1.34 2.99-3L15 6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 15 6.7 12H5c0 3.42 2.72 6.23 6 6.72V22h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>';
+        headerPlayText.textContent = 'Voice Mode';
+        headerPlayPauseBtn.classList.remove('primary', 'success');
       } else if (isPlaying) {
-        playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
-        playTextEl.textContent = 'Pause';
-        playPauseBtn.classList.remove('primary');
-        playPauseBtn.classList.add('success');
-        playPauseBtn.style.opacity = '1';
-        playPauseBtn.style.cursor = 'pointer';
+        headerPlayIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+        headerPlayText.textContent = 'Pause';
+        headerPlayPauseBtn.classList.remove('primary');
+        headerPlayPauseBtn.classList.add('success');
       } else {
-        playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
-        playTextEl.textContent = 'Play';
-        playPauseBtn.classList.remove('success');
-        playPauseBtn.classList.add('primary');
-        playPauseBtn.style.opacity = '1';
-        playPauseBtn.style.cursor = 'pointer';
+        headerPlayIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+        headerPlayText.textContent = 'Play Teleprompter';
+        headerPlayPauseBtn.classList.remove('success');
+        headerPlayPauseBtn.classList.add('primary');
       }
       updateMonitorStatus();
     }
 
-    playPauseBtn.addEventListener('click', async () => {
+    headerPlayPauseBtn.addEventListener('click', async () => {
+      console.log('🎮 Play button clicked. Current state:', {
+        isPlaying,
+        isRecording,
+        countdownEnabled: countdownCheckbox.checked,
+        voiceFollowActive
+      });
+
       // VOICE FOLLOW MODE: Block play/pause - voice controls everything
       if (voiceFollowActive) {
+        console.log('⚠️ Voice follow active, blocking play/pause');
         return;
       }
 
       // When starting playback, auto-switch to monitor view and open display
       if (!isPlaying) {
+        console.log('📺 Opening monitor view and display');
         // Switch to monitor view
         viewMonitorBtn.classList.add('active');
         viewEditorBtn.classList.remove('active');
@@ -478,16 +1605,39 @@
       }
 
       if (!isPlaying && countdownCheckbox.checked) {
+        console.log('⏱️ Starting with countdown enabled');
         // Start countdown on both teleprompter and monitor preview
         const seconds = parseInt(countdownSeconds.value);
         ipcRenderer.send('start-countdown', seconds);
         runMonitorCountdown(seconds);
         isPlaying = true;
         updatePlayButton();
+        // Start recording session automatically
+        startRecording();
+        // Add automatic "Playback Started" marker immediately when countdown starts
+        console.log('🎬 Adding auto playback started marker (countdown starting)');
+        addProblemMarker('playback-started', '▶️ Playback Started');
       } else {
+        console.log('🔄 Toggling play state. Was playing:', isPlaying);
         isPlaying = !isPlaying;
+        console.log('🔄 Now playing:', isPlaying);
         if (!isPlaying) {
+          console.log('⏸️ Paused - adding playback stopped marker');
           cancelMonitorCountdown();
+          // Add automatic "Playback Stopped" marker for video editing
+          if (isRecording) {
+            addProblemMarker('playback-stopped', '⏸️ Playback Stopped');
+          }
+        } else {
+          console.log('▶️ Started playing - adding marker');
+          // Start recording when playback starts
+          if (!isRecording) {
+            console.log('📹 Starting recording first');
+            startRecording();
+          }
+          // Add automatic "Playback Started" marker for video editing
+          console.log('🎬 Adding auto playback started marker');
+          addProblemMarker('playback-started', '▶️ Playback Started');
         }
         updatePlayButton();
         // Always include position so playback continues from current spot
@@ -499,6 +1649,8 @@
     ipcRenderer.on('countdown-complete', () => {
       isPlaying = true;
       updatePlayButton();
+      // Note: Marker already added when countdown started, no need for duplicate
+      console.log('⏱️ Countdown complete - continuing playback');
     });
 
     // Listen for state updates from remote
@@ -513,23 +1665,6 @@
       }
     });
 
-    document.getElementById('stopBtn').addEventListener('click', () => {
-      isPlaying = false;
-      cancelMonitorCountdown();
-      updatePlayButton();
-      positionSlider.value = 0;
-      // Also reset monitor preview
-      applyMonitorPosition(0);
-      monitorProgressBar.style.width = '0%';
-      monitorPercent.textContent = '0%';
-      positionValue.textContent = '0%';
-      ipcRenderer.send('playback-control', {
-        isPlaying: false,
-        speed: parseInt(speedSlider.value),
-        position: 0,
-        reset: true
-      });
-    });
 
     function sendPlaybackState(includePosition = false) {
       const state = {
@@ -552,15 +1687,13 @@
       sendPlaybackState(false);
     });
 
-    // Position control - include position
-    positionSlider.addEventListener('input', () => sendPlaybackState(true));
-
     const positionValue = document.getElementById('positionValue');
     const findTextInput = document.getElementById('findTextInput');
 
-    // Update position display
+    // Position control - update display and send to teleprompter
     positionSlider.addEventListener('input', () => {
       positionValue.textContent = positionSlider.value + '%';
+      sendPlaybackState(true);
     });
 
     document.getElementById('jumpStartBtn').addEventListener('click', () => {
@@ -656,12 +1789,21 @@
     }
 
     fontFamilySelect.addEventListener('change', sendSettings);
-    fontSizeInput.addEventListener('change', sendSettings);
+    fontSizeInput.addEventListener('input', () => {
+      fontSizeValue.textContent = fontSizeInput.value;
+      sendSettings();
+    });
     textColorInput.addEventListener('change', sendSettings);
     bgColorInput.addEventListener('change', sendSettings);
     mirrorCheckbox.addEventListener('change', sendSettings);
     flipCheckbox.addEventListener('change', sendSettings);
 
+    // Toggle countdown seconds visibility based on checkbox
+    countdownCheckbox.addEventListener('change', () => {
+      countdownRow.style.display = countdownCheckbox.checked ? 'flex' : 'none';
+    });
+    // Initialize countdown row visibility
+    countdownRow.style.display = countdownCheckbox.checked ? 'flex' : 'none';
 
     // Script text change
     scriptText.addEventListener('input', () => {
@@ -789,7 +1931,7 @@
         editFromMonitorBtn.innerHTML = '<svg viewBox="0 0 24 24" style="width: 12px; height: 12px;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg> Edit';
 
         // Sync edited content back to editor (extract text from HTML)
-        scriptText.value = monitorScriptText.innerText;
+        scriptText.value = monitorScriptText.textContent;
         updateCharCount();
         sendScript();
       }
@@ -877,13 +2019,15 @@
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
-      // Skip shortcuts when typing in text inputs
+      // Skip shortcuts when typing in any input field
       if (e.target === scriptText) return;
-      if (e.target.isContentEditable) return; // Skip when editing in monitor
+      if (e.target.isContentEditable) return;
+      if (e.target.tagName === 'INPUT') return; // Skip for all input fields (modals, etc.)
+      if (e.target.tagName === 'TEXTAREA') return;
 
       if (e.code === 'Space') {
         e.preventDefault();
-        playPauseBtn.click();
+        headerPlayPauseBtn.click();
       } else if (e.code === 'ArrowUp') {
         e.preventDefault();
         speedSlider.value = Math.min(100, parseInt(speedSlider.value) + 5);
@@ -903,47 +2047,11 @@
       }
     });
 
-    // Draggable font size input (with threshold so arrows still work)
-    (function() {
-      let isMouseDown = false;
-      let isDragging = false;
-      let startX = 0;
-      let startValue = 0;
-      const dragThreshold = 5; // pixels before drag starts
-
-      fontSizeInput.addEventListener('mousedown', (e) => {
-        isMouseDown = true;
-        isDragging = false;
-        startX = e.clientX;
-        startValue = parseInt(fontSizeInput.value);
-      });
-
-      document.addEventListener('mousemove', (e) => {
-        if (!isMouseDown) return;
-        const delta = e.clientX - startX;
-
-        // Only start dragging after threshold
-        if (!isDragging && Math.abs(delta) > dragThreshold) {
-          isDragging = true;
-        }
-
-        if (isDragging) {
-          const newValue = Math.min(200, Math.max(24, startValue + Math.round(delta / 2)));
-          fontSizeInput.value = newValue;
-          sendSettings();
-        }
-      });
-
-      document.addEventListener('mouseup', () => {
-        isMouseDown = false;
-        isDragging = false;
-      });
-    })();
 
     // Smooth scroll in monitor viewport to change position
-    let targetPosition = parseFloat(positionSlider.value) || 0;
-    let currentDisplayPosition = targetPosition;
-    let scrollAnimationId = null;
+    // Initialize position from slider (variables declared at top of file)
+    targetPosition = parseFloat(positionSlider.value) || 0;
+    currentDisplayPosition = targetPosition;
 
     function animateScroll() {
       const diff = targetPosition - currentDisplayPosition;
@@ -1450,7 +2558,13 @@
       if (!editorView.classList.contains('active')) return;
 
       // Set selection to highlight the word
-      scriptText.focus();
+      // Only focus if user isn't actively typing in another input field
+      const activeEl = document.activeElement;
+      const isTypingElsewhere = (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA') && activeEl !== scriptText;
+
+      if (!isTypingElsewhere) {
+        scriptText.focus();
+      }
       scriptText.setSelectionRange(charPosition, charPosition + wordLength);
 
       // Scroll the selection into view
@@ -1704,7 +2818,7 @@
           isPlaying: false,
           speed: parseInt(speedSlider.value)
         });
-        playPauseBtn.textContent = '▶ Play';
+        updatePlayButton();
       }
 
       const deviceId = audioInputSelect.value;
@@ -1861,3 +2975,115 @@
         setTimeout(() => startWhisperVoiceFollow(), 100);
       }
     });
+
+    // =======================================
+    // Dropdown Menus
+    // =======================================
+    const dropdowns = document.querySelectorAll('.dropdown');
+    console.log('🔍 Found dropdowns:', dropdowns.length);
+
+    dropdowns.forEach(dropdown => {
+      const toggle = dropdown.querySelector('.dropdown-toggle');
+      console.log('🔍 Dropdown toggle:', toggle);
+
+      if (!toggle) {
+        console.error('❌ No toggle found for dropdown:', dropdown);
+        return;
+      }
+
+      toggle.addEventListener('click', (e) => {
+        console.log('✅ Dropdown toggle clicked');
+        e.stopPropagation();
+
+        // Close other dropdowns
+        dropdowns.forEach(d => {
+          if (d !== dropdown) {
+            d.classList.remove('active');
+          }
+        });
+
+        // Toggle current dropdown
+        dropdown.classList.toggle('active');
+        console.log('✅ Dropdown active state:', dropdown.classList.contains('active'));
+      });
+
+      // Close dropdown when clicking menu items
+      const items = dropdown.querySelectorAll('.dropdown-item');
+      items.forEach(item => {
+        item.addEventListener('click', () => {
+          dropdown.classList.remove('active');
+        });
+      });
+    });
+
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.dropdown')) {
+        dropdowns.forEach(dropdown => {
+          dropdown.classList.remove('active');
+        });
+      }
+    });
+
+    // =======================================
+    // Refresh Warning (Development Only)
+    // =======================================
+    let allowRefresh = false;
+
+    // Catch Cmd+R / Ctrl+R / F5
+    document.addEventListener('keydown', (e) => {
+      // Cmd+R (Mac) or Ctrl+R (Windows/Linux)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
+        e.preventDefault();
+        showRefreshWarning();
+      }
+      // F5
+      if (e.key === 'F5') {
+        e.preventDefault();
+        showRefreshWarning();
+      }
+    });
+
+    // Catch browser refresh attempts
+    window.addEventListener('beforeunload', (e) => {
+      if (!allowRefresh && scriptText.value.trim() !== '') {
+        // This message may not show in modern browsers, but the dialog will still appear
+        e.preventDefault();
+        e.returnValue = 'You have unsaved work. Are you sure you want to refresh?';
+        return e.returnValue;
+      }
+    });
+
+    function showRefreshWarning() {
+      const modal = document.getElementById('refreshWarningModal');
+      const confirmBtn = document.getElementById('refreshConfirmBtn');
+      const cancelBtn = document.getElementById('refreshCancelBtn');
+
+      modal.classList.add('visible');
+
+      const handleConfirm = () => {
+        allowRefresh = true;
+        modal.classList.remove('visible');
+        cleanup();
+        location.reload();
+      };
+
+      const handleCancel = () => {
+        modal.classList.remove('visible');
+        cleanup();
+      };
+
+      const cleanup = () => {
+        confirmBtn.removeEventListener('click', handleConfirm);
+        cancelBtn.removeEventListener('click', handleCancel);
+        modal.removeEventListener('click', handleOverlayClick);
+      };
+
+      const handleOverlayClick = (e) => {
+        if (e.target === modal) handleCancel();
+      };
+
+      confirmBtn.addEventListener('click', handleConfirm);
+      cancelBtn.addEventListener('click', handleCancel);
+      modal.addEventListener('click', handleOverlayClick);
+    }

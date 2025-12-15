@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Umbrellaprompter</title>
-  <link rel="stylesheet" href="css/operator.css">
+  <link rel="stylesheet" href="css/operator-modern.css">
 </head>
 <body>
   <header class="header">
@@ -34,22 +34,54 @@
 
     <div class="header-divider"></div>
 
-    <button class="btn" id="openFileBtn">
-      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/></svg>
-      Open
-    </button>
-    <button class="btn ghost" id="newScriptBtn">New</button>
+    <div class="dropdown" id="fileDropdown">
+      <button type="button" class="btn ghost dropdown-toggle">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/></svg>
+        File
+      </button>
+      <div class="dropdown-menu">
+        <button type="button" class="dropdown-item" id="openFileBtn">
+          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/></svg>
+          Open File
+        </button>
+        <button type="button" class="dropdown-item" id="saveProjectBtn">
+          <svg viewBox="0 0 24 24"><path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4z"/></svg>
+          Save Project
+        </button>
+        <button type="button" class="dropdown-item" id="loadProjectBtn">
+          <svg viewBox="0 0 24 24"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4z"/></svg>
+          Load Project
+        </button>
+      </div>
+    </div>
+
+    <div class="dropdown" id="exportDropdown">
+      <button type="button" class="btn ghost dropdown-toggle">
+        <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+        Export
+      </button>
+      <div class="dropdown-menu">
+        <button type="button" class="dropdown-item" id="exportGuideBtn">
+          <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.11 0-2 .89-2 2v14c0 1.11.89 2 2 2h14c1.11 0 2-.89 2-2V5c0-1.11-.89-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+          Export Timeline
+        </button>
+        <button type="button" class="dropdown-item" id="exportDocxBtn">
+          <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.11 0-2 .89-2 2v16c0 1.11.89 2 2 2h8l6-6V4c0-1.11-.89-2-2-2zm4 18l-4 4H6c-1.11 0-2-.89-2-2V4c0-1.11.89-2 2-2h8v6h6v10z"/></svg>
+          Export Script
+        </button>
+      </div>
+    </div>
 
     <div class="header-divider"></div>
 
-    <button class="btn" id="saveProjectBtn">
-      <svg viewBox="0 0 24 24"><path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4z"/></svg>
-      Save Project
+    <button class="btn primary" id="headerPlayPauseBtn">
+      <svg viewBox="0 0 24 24" id="headerPlayIcon"><path d="M8 5v14l11-7z"/></svg>
+      <span id="headerPlayText">Play Teleprompter</span>
     </button>
-    <button class="btn" id="loadProjectBtn">Load Project</button>
-    <button class="btn" id="exportDocxBtn">
-      <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-      Export .docx
+
+    <button class="btn success" id="toggleRecordingBtn">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>
+      Start Recording
     </button>
 
     <div class="file-indicator">
@@ -79,6 +111,20 @@
 
   <main class="main">
     <div class="script-panel">
+      <!-- Multi-Script Tabs - Phase 1 Feature -->
+      <div class="script-tabs" id="scriptTabs">
+        <div class="script-tab active" data-script-id="main">
+          <span class="script-tab-name">Untitled</span>
+          <div class="script-tab-status"></div>
+          <button class="script-tab-close" onclick="event.stopPropagation();">
+            <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          </button>
+        </div>
+        <button class="script-tab-add" id="addScriptTab" title="Add script">
+          <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+        </button>
+      </div>
+
       <div class="script-header">
         <h2>Script</h2>
         <div class="script-meta">
@@ -87,8 +133,8 @@
             <button class="btn" id="viewMonitorBtn">Monitor</button>
           </div>
           <span class="char-count" id="charCount">0 characters</span>
-          <button class="btn" id="cleanUpBtn" style="padding: 4px 8px; font-size: 11px;" title="Remove extra blank lines">
-            <svg viewBox="0 0 24 24" style="width: 12px; height: 12px;"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>
+          <button class="btn btn-sm" id="cleanUpBtn" title="Remove extra blank lines">
+            <svg viewBox="0 0 24 24"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>
             Clean Up
           </button>
         </div>
@@ -142,6 +188,15 @@
     </div>
 
     <aside class="control-panel">
+      <!-- Control Panel Header with Toggle -->
+      <div class="control-panel-header" id="controlPanelHeader" style="display: none;">
+        <h2>Controls</h2>
+        <button class="btn btn-sm" id="showTimelineBtn">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+          Show Timeline
+        </button>
+      </div>
+
       <!-- Display -->
       <div class="control-section">
         <div class="section-header">
@@ -167,15 +222,6 @@
         <div class="section-header">
           <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
           <h3>Playback</h3>
-        </div>
-        <div class="playback-main">
-          <button class="btn primary btn-play" id="playPauseBtn">
-            <svg viewBox="0 0 24 24" id="playIcon"><path d="M8 5v14l11-7z"/></svg>
-            <span id="playText">Play</span>
-          </button>
-          <button class="btn btn-reset" id="stopBtn">
-            <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
-          </button>
         </div>
 
         <div class="toggle-row">
@@ -273,10 +319,13 @@
 
       <!-- Appearance & Cues Tabs -->
       <div class="control-section">
-        <div class="tabs">
-          <div class="tab active" data-tab="appearance">Appearance</div>
-          <div class="tab" data-tab="cues">Cue Markers</div>
-          <div class="tab" data-tab="remote">Remote</div>
+        <div class="section-header">
+          <svg viewBox="0 0 24 24"><path d="M12 2l-5.5 9h11z"/><circle cx="17.5" cy="17.5" r="4.5"/><path d="M3 13.5h8v8H3z"/></svg>
+          <select id="settingsTabSelect" class="settings-tab-select">
+            <option value="appearance">Appearance</option>
+            <option value="cues">Cue Markers</option>
+            <option value="remote">Remote Control</option>
+          </select>
         </div>
 
         <!-- Appearance Tab -->
@@ -295,9 +344,12 @@
                 </select>
               </div>
             </div>
-            <div class="style-row">
-              <label>Font Size</label>
-              <input type="number" id="fontSizeInput" class="draggable" value="72" min="24" max="200" title="Click and drag left/right to adjust">
+            <div class="slider-group" style="margin-top: 8px;">
+              <div class="slider-label">
+                <span>Font Size</span>
+                <span class="slider-value" id="fontSizeValue">72</span>
+              </div>
+              <input type="range" id="fontSizeInput" min="24" max="200" value="72">
             </div>
             <div class="style-row">
               <label>Text Color</label>
@@ -375,6 +427,33 @@
           <kbd class="kbd">Home</kbd> <kbd class="kbd">End</kbd>
         </div>
       </div>
+
+      <!-- Marker Timeline Panel - Phase 2 Feature -->
+      <div class="marker-timeline" id="markerTimeline">
+        <div class="marker-timeline-header">
+          <h3>Recording Timeline</h3>
+          <button class="btn btn-sm" id="showControlsBtn">
+            <svg viewBox="0 0 24 24"><path d="M12.14 2.17a10 10 0 0 0-9.96 9.96c0 5.52 4.48 10 10 10 5.52 0 10-4.48 10-10 0-5.52-4.48-10-10-10h-.04zm.02 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/><path d="M11 7h2v6h-2zm0 8h2v2h-2z"/></svg>
+            Show Controls
+          </button>
+        </div>
+        <div class="marker-timeline-content" id="markerTimelineContent">
+          <div class="marker-timeline-empty">
+            <svg viewBox="0 0 24 24" style="width: 48px; height: 48px; opacity: 0.3; margin-bottom: 12px;">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
+            <p>No markers yet</p>
+            <span>Click marker buttons below to add timestamps</span>
+          </div>
+        </div>
+        <div class="marker-timeline-footer">
+          <div class="marker-stats">
+            <span id="markerCount">0 markers</span>
+            <span id="markerDuration">00:00:00</span>
+          </div>
+        </div>
+      </div>
+
     </aside>
   </main>
 
@@ -388,6 +467,159 @@
         <button class="btn primary" id="cueSaveBtn">Add Cue</button>
       </div>
     </div>
+  </div>
+
+  <!-- Script Rename Modal -->
+  <div class="modal-overlay" id="renameModal">
+    <div class="modal">
+      <h3>Rename Script</h3>
+      <input type="text" id="renameInput" placeholder="Enter script name...">
+      <div class="modal-buttons">
+        <button class="btn" id="renameCancelBtn">Cancel</button>
+        <button class="btn primary" id="renameSaveBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide Range Modal -->
+  <div class="modal-overlay" id="slideRangeModal">
+    <div class="modal">
+      <h3>Edit Slide Range</h3>
+      <input type="text" id="slideRangeInput" placeholder='e.g., "1-10" or "5" or "1-3, 8-10"'>
+      <div class="modal-buttons">
+        <button class="btn" id="slideRangeCancelBtn">Cancel</button>
+        <button class="btn primary" id="slideRangeSaveBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Note Marker Modal -->
+  <div class="modal-overlay" id="noteModal">
+    <div class="modal">
+      <h3>Add Note</h3>
+      <input type="text" id="noteInput" placeholder="Enter note...">
+      <div class="modal-buttons">
+        <button class="btn" id="noteCancelBtn">Cancel</button>
+        <button class="btn primary" id="noteSaveBtn">Add Note</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Retake Marker Modal -->
+  <div class="modal-overlay" id="retakeModal">
+    <div class="modal">
+      <h3>Mark Retake</h3>
+      <p style="color: var(--text-secondary); font-size: 13px; margin: 8px 0 12px 0;">Where should the editor go back to for the retake?</p>
+      <input type="text" id="retakeInput" placeholder="Starting at...">
+      <div class="modal-buttons">
+        <button class="btn" id="retakeCancelBtn">Cancel</button>
+        <button class="btn danger" id="retakeSaveBtn">Mark Retake</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export Guide Modal -->
+  <div class="modal-overlay" id="exportModal">
+    <div class="modal">
+      <h3>Export Editing Guide</h3>
+      <p style="color: var(--text-secondary); font-size: 13px; margin: 12px 0;">Choose export format:</p>
+      <div class="modal-buttons">
+        <button class="btn" id="exportCancelBtn">Cancel</button>
+        <button class="btn" id="exportCsvBtn">Export CSV</button>
+        <button class="btn primary" id="exportTxtBtn">Export TXT</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Refresh Warning Modal -->
+  <div class="modal-overlay" id="refreshWarningModal">
+    <div class="modal">
+      <h3>Refresh App?</h3>
+      <p style="color: var(--text-secondary); font-size: 13px; margin: 12px 0;">This will reload the app and may clear unsaved work. Are you sure?</p>
+      <div class="modal-buttons">
+        <button class="btn" id="refreshCancelBtn">Cancel</button>
+        <button class="btn primary" id="refreshConfirmBtn">Refresh</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stop Recording Confirmation Modal -->
+  <div class="modal-overlay" id="stopRecordingModal">
+    <div class="modal">
+      <h3>Stop Recording?</h3>
+      <p style="color: var(--text-secondary); font-size: 13px; margin: 12px 0 16px 0;">
+        This will end your recording session.
+      </p>
+      <div style="background: var(--accent-subtle); border-left: 3px solid var(--accent); padding: 12px; border-radius: 4px; margin-bottom: 16px;">
+        <p style="color: var(--text-primary); font-size: 12px; margin: 0; font-weight: 600;">
+          💡 Tip: Export your timeline before stopping to save your markers for video editing.
+        </p>
+      </div>
+      <div class="modal-buttons">
+        <button class="btn" id="stopRecordingCancelBtn">Cancel</button>
+        <button class="btn danger" id="stopRecordingConfirmBtn">Stop Recording</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export Timeline Reminder Modal -->
+  <div class="modal-overlay" id="exportTimelineReminderModal">
+    <div class="modal">
+      <h3>Recording Stopped</h3>
+      <p style="color: var(--text-secondary); font-size: 13px; margin: 12px 0;">
+        Your recording session has ended. Would you like to export the timeline with your markers?
+      </p>
+      <div style="background: var(--bg-tertiary); padding: 12px; border-radius: 6px; margin: 16px 0;">
+        <p style="color: var(--text-tertiary); font-size: 11px; margin: 0;">
+          <strong style="color: var(--text-secondary);">Recording Summary:</strong><br>
+          <span id="exportReminderMarkerCount">0 markers</span> •
+          <span id="exportReminderDuration">00:00:00</span>
+        </p>
+      </div>
+      <div class="modal-buttons">
+        <button class="btn" id="exportReminderLaterBtn">Maybe Later</button>
+        <button class="btn primary" id="exportReminderExportBtn">Export Timeline</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Problem Marker Toolbar - Phase 1 Feature -->
+  <div class="marker-toolbar" id="markerToolbar" style="display: none;">
+    <button class="marker-btn retake" id="markerRetake">
+      <span class="marker-btn-icon">🔴</span>
+      <span>Retake</span>
+    </button>
+    <button class="marker-btn stumble" id="markerStumble">
+      <span class="marker-btn-icon">⚠️</span>
+      <span>Stumble</span>
+    </button>
+    <button class="marker-btn note" id="markerNote">
+      <span class="marker-btn-icon">📝</span>
+      <span>Note</span>
+    </button>
+  </div>
+
+  <!-- Recording Timer - Phase 1 Feature -->
+  <div class="recording-status" id="recordingStatus">
+    <div class="recording-indicator">
+      <div class="recording-dot"></div>
+      <span>RECORDING</span>
+    </div>
+    <div>
+      <div class="timer-label">Session Time</div>
+      <div class="timer-display" id="sessionTimer">00:00:00</div>
+    </div>
+    <div>
+      <div class="timer-label">Script Time</div>
+      <div class="timer-display" id="scriptTimer" style="font-size: 20px;">00:00</div>
+    </div>
+  </div>
+
+  <!-- Auto-save Indicator - Phase 1 Feature -->
+  <div class="autosave-indicator" id="autosaveIndicator">
+    <div class="autosave-spinner" id="autosaveSpinner"></div>
+    <span id="autosaveText">Auto-saving...</span>
+    <span class="autosave-checkmark" id="autosaveCheckmark" style="display: none;">✓</span>
   </div>
 
   <script src="js/operator.js"></script>

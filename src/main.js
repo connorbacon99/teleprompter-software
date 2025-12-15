@@ -7,15 +7,13 @@ const { Document, Packer, Paragraph, TextRun } = require('docx');
 const http = require('http');
 const os = require('os');
 const QRCode = require('qrcode');
-const { autoUpdater } = require('electron-updater');
+
+// Don't load electron-updater until app is ready
+let autoUpdater = null;
 
 // Enable Web Speech API - must be set before app ready
 app.commandLine.appendSwitch('enable-speech-dispatcher');
 app.commandLine.appendSwitch('enable-features', 'WebSpeechAPI');
-
-// Configure auto-updater
-autoUpdater.autoDownload = false;
-autoUpdater.autoInstallOnAppQuit = true;
 
 let operatorWindow = null;
 let teleprompterWindow = null;
@@ -1027,58 +1025,9 @@ ipcMain.handle('get-remote-status', () => {
   };
 });
 
-// Auto-updater event handlers
-autoUpdater.on('checking-for-update', () => {
-  if (operatorWindow) {
-    operatorWindow.webContents.send('update-status', { status: 'checking' });
-  }
-});
-
-autoUpdater.on('update-available', (info) => {
-  if (operatorWindow) {
-    operatorWindow.webContents.send('update-status', {
-      status: 'available',
-      version: info.version,
-      releaseNotes: info.releaseNotes
-    });
-  }
-});
-
-autoUpdater.on('update-not-available', () => {
-  if (operatorWindow) {
-    operatorWindow.webContents.send('update-status', { status: 'not-available' });
-  }
-});
-
-autoUpdater.on('download-progress', (progress) => {
-  if (operatorWindow) {
-    operatorWindow.webContents.send('update-status', {
-      status: 'downloading',
-      percent: progress.percent
-    });
-  }
-});
-
-autoUpdater.on('update-downloaded', (info) => {
-  if (operatorWindow) {
-    operatorWindow.webContents.send('update-status', {
-      status: 'downloaded',
-      version: info.version
-    });
-  }
-});
-
-autoUpdater.on('error', (err) => {
-  if (operatorWindow) {
-    operatorWindow.webContents.send('update-status', {
-      status: 'error',
-      message: err.message
-    });
-  }
-});
-
-// IPC handlers for updates
+// IPC handlers for updates (with null checks since autoUpdater is initialized later)
 ipcMain.handle('check-for-updates', async () => {
+  if (!autoUpdater) return { error: 'Auto-updater not available' };
   try {
     return await autoUpdater.checkForUpdates();
   } catch (err) {
@@ -1087,6 +1036,7 @@ ipcMain.handle('check-for-updates', async () => {
 });
 
 ipcMain.handle('download-update', async () => {
+  if (!autoUpdater) return { error: 'Auto-updater not available' };
   try {
     await autoUpdater.downloadUpdate();
     return { success: true };
@@ -1096,7 +1046,9 @@ ipcMain.handle('download-update', async () => {
 });
 
 ipcMain.handle('install-update', () => {
-  autoUpdater.quitAndInstall(false, true);
+  if (autoUpdater) {
+    autoUpdater.quitAndInstall(false, true);
+  }
 });
 
 ipcMain.handle('get-app-version', () => {
@@ -1120,6 +1072,65 @@ app.whenReady().then(async () => {
     return allowedPermissions.includes(permission);
   });
 
+  // Initialize auto-updater now that app is ready
+  try {
+    autoUpdater = require('electron-updater').autoUpdater;
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = true;
+
+    // Set up auto-updater event handlers
+    autoUpdater.on('checking-for-update', () => {
+      if (operatorWindow) {
+        operatorWindow.webContents.send('update-status', { status: 'checking' });
+      }
+    });
+
+    autoUpdater.on('update-available', (info) => {
+      if (operatorWindow) {
+        operatorWindow.webContents.send('update-status', {
+          status: 'available',
+          version: info.version,
+          releaseNotes: info.releaseNotes
+        });
+      }
+    });
+
+    autoUpdater.on('update-not-available', () => {
+      if (operatorWindow) {
+        operatorWindow.webContents.send('update-status', { status: 'not-available' });
+      }
+    });
+
+    autoUpdater.on('download-progress', (progress) => {
+      if (operatorWindow) {
+        operatorWindow.webContents.send('update-status', {
+          status: 'downloading',
+          percent: progress.percent
+        });
+      }
+    });
+
+    autoUpdater.on('update-downloaded', (info) => {
+      if (operatorWindow) {
+        operatorWindow.webContents.send('update-status', {
+          status: 'downloaded',
+          version: info.version
+        });
+      }
+    });
+
+    autoUpdater.on('error', (err) => {
+      if (operatorWindow) {
+        operatorWindow.webContents.send('update-status', {
+          status: 'error',
+          message: err.message
+        });
+      }
+    });
+  } catch (err) {
+    console.log('Auto-updater not available:', err.message);
+  }
+
   // Start local server first (needed for Web Speech API)
   try {
     await createLocalServer();
@@ -1131,7 +1142,7 @@ app.whenReady().then(async () => {
   createOperatorWindow();
 
   // Check for updates after app is ready (only in production)
-  if (app.isPackaged) {
+  if (app.isPackaged && autoUpdater) {
     setTimeout(() => {
       autoUpdater.checkForUpdates().catch(() => {});
     }, 3000);
