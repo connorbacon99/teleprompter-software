@@ -1277,6 +1277,55 @@ body {
   color: white;
 }
 
+/* Timeline marker buttons */
+.marker-timeline-buttons {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+  justify-content: center;
+}
+
+.marker-btn-timeline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+
+.marker-btn-timeline:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.marker-btn-timeline:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.marker-btn-timeline.retake:not(:disabled):hover {
+  background: rgba(244, 63, 94, 0.1);
+  border-color: var(--danger);
+}
+
+.marker-btn-timeline.stumble:not(:disabled):hover {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: var(--warning);
+}
+
+.marker-btn-timeline.note:not(:disabled):hover {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: var(--accent);
+}
+
 .marker-timeline-footer {
   padding: 16px;
   border-top: 1px solid var(--border-subtle);
@@ -1416,6 +1465,12 @@ button:focus-visible {
     .script-editor textarea:hover { border-color: var(--text-tertiary); }
     .script-editor textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-subtle); }
     .script-editor textarea::placeholder { color: var(--text-tertiary); }
+
+    /* Yellow text selection in script editor for better visibility */
+    .script-editor textarea::selection {
+      background-color: rgba(255, 220, 0, 0.9);
+      color: #000;
+    }
 
     /* Live Monitor View - scaled clone of teleprompter */
     .script-monitor { flex: 1; padding: 16px; overflow: hidden; display: none; flex-direction: column; }

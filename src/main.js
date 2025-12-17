@@ -106,6 +106,14 @@ function createOperatorWindow() {
   // Load from localhost for better API compatibility
   operatorWindow.loadURL(`http://127.0.0.1:${localServerPort}/operator.html`);
 
+  // Handle window close - allow graceful shutdown
+  operatorWindow.on('close', (e) => {
+    // Send signal to renderer to allow close without warning
+    if (operatorWindow && operatorWindow.webContents) {
+      operatorWindow.webContents.send('app-closing');
+    }
+  });
+
   operatorWindow.on('closed', () => {
     operatorWindow = null;
     if (teleprompterWindow) {
@@ -686,6 +694,14 @@ ipcMain.on('playback-control', (event, state) => {
   }
 });
 
+// Speed-only update (doesn't affect playback state - safe during countdown)
+ipcMain.on('speed-update', (event, data) => {
+  currentState.speed = data.speed;
+  if (teleprompterWindow) {
+    teleprompterWindow.webContents.send('speed-only-update', { speed: data.speed });
+  }
+});
+
 // Receive position updates from teleprompter for operator monitor
 ipcMain.on('position-update', (event, positionData) => {
   // positionData contains: { percent, transform, containerHeight, scrollHeight }
@@ -954,6 +970,46 @@ ipcMain.handle('autosave-session', async (event, autosaveData) => {
   }
 });
 
+// Auto-backup timeline history
+ipcMain.handle('backup-timeline', async (event, { content, sessionId }) => {
+  try {
+    const historyDir = path.join(app.getPath('userData'), 'timeline-history');
+    if (!fs.existsSync(historyDir)) {
+      fs.mkdirSync(historyDir, { recursive: true });
+    }
+
+    // Create filename with timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `timeline-${sessionId || 'session'}-${timestamp}.txt`;
+    const filepath = path.join(historyDir, filename);
+
+    fs.writeFileSync(filepath, content);
+
+    // Keep only last 50 backups (clean up old ones)
+    const files = fs.readdirSync(historyDir)
+      .filter(f => f.startsWith('timeline-') && f.endsWith('.txt'))
+      .map(f => ({ name: f, path: path.join(historyDir, f), time: fs.statSync(path.join(historyDir, f)).mtime }))
+      .sort((a, b) => b.time - a.time);
+
+    // Remove files beyond the 50 most recent
+    if (files.length > 50) {
+      files.slice(50).forEach(f => {
+        try { fs.unlinkSync(f.path); } catch (e) { /* ignore */ }
+      });
+    }
+
+    return { success: true, filepath, historyDir };
+  } catch (error) {
+    console.error('Timeline backup error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get timeline history folder path
+ipcMain.handle('get-timeline-history-path', async () => {
+  return path.join(app.getPath('userData'), 'timeline-history');
+});
+
 // Load project
 ipcMain.handle('load-project', async () => {
   const result = await dialog.showOpenDialog(operatorWindow, {
@@ -1011,10 +1067,16 @@ ipcMain.handle('get-remote-status', () => {
 
 // IPC handlers for updates (with null checks since autoUpdater is initialized later)
 ipcMain.handle('check-for-updates', async () => {
+  console.log('📡 Check for updates requested');
+  console.log('   autoUpdater available:', !!autoUpdater);
+  console.log('   app.isPackaged:', app.isPackaged);
   if (!autoUpdater) return { error: 'Auto-updater not available' };
   try {
-    return await autoUpdater.checkForUpdates();
+    const result = await autoUpdater.checkForUpdates();
+    console.log('   Check result:', result);
+    return result;
   } catch (err) {
+    console.log('   Check error:', err.message);
     return { error: err.message };
   }
 });
@@ -1062,14 +1124,21 @@ app.whenReady().then(async () => {
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
 
+    // Log auto-updater configuration
+    console.log('📦 Auto-updater initialized');
+    console.log('   App is packaged:', app.isPackaged);
+    console.log('   Current version:', app.getVersion());
+
     // Set up auto-updater event handlers
     autoUpdater.on('checking-for-update', () => {
+      console.log('🔍 Checking for updates...');
       if (operatorWindow) {
         operatorWindow.webContents.send('update-status', { status: 'checking' });
       }
     });
 
     autoUpdater.on('update-available', (info) => {
+      console.log('✅ Update available:', info.version);
       if (operatorWindow) {
         operatorWindow.webContents.send('update-status', {
           status: 'available',
@@ -1080,6 +1149,7 @@ app.whenReady().then(async () => {
     });
 
     autoUpdater.on('update-not-available', () => {
+      console.log('ℹ️ No updates available - you have the latest version');
       if (operatorWindow) {
         operatorWindow.webContents.send('update-status', { status: 'not-available' });
       }
@@ -1104,6 +1174,7 @@ app.whenReady().then(async () => {
     });
 
     autoUpdater.on('error', (err) => {
+      console.log('❌ Auto-updater error:', err.message);
       if (operatorWindow) {
         operatorWindow.webContents.send('update-status', {
           status: 'error',

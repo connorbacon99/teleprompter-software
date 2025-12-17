@@ -473,6 +473,11 @@
       }
     });
 
+    // Receive speed-only updates (doesn't affect playback state - safe during countdown)
+    ipcRenderer.on('speed-only-update', (event, data) => {
+      scrollSpeed = data.speed;
+    });
+
     // Receive settings from operator
     ipcRenderer.on('settings-update', (event, settings) => {
       scriptText.style.fontSize = settings.fontSize + 'px';

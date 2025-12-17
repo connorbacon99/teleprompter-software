@@ -80,6 +80,10 @@
     const inlineMarkerRetake = document.getElementById('inlineMarkerRetake');
     const inlineMarkerStumble = document.getElementById('inlineMarkerStumble');
     const inlineMarkerNote = document.getElementById('inlineMarkerNote');
+    // Timeline marker buttons
+    const timelineMarkerRetake = document.getElementById('timelineMarkerRetake');
+    const timelineMarkerStumble = document.getElementById('timelineMarkerStumble');
+    const timelineMarkerNote = document.getElementById('timelineMarkerNote');
     const autosaveIndicator = document.getElementById('autosaveIndicator');
     const autosaveText = document.getElementById('autosaveText');
     const autosaveSpinner = document.getElementById('autosaveSpinner');
@@ -438,6 +442,51 @@
       updateScriptTabs();
       updateMarkerTimeline();
       showMarkerFeedback(type);
+
+      // Auto-backup timeline after each marker is added
+      autoBackupTimeline();
+    }
+
+    // Auto-backup timeline to history folder
+    async function autoBackupTimeline() {
+      if (problemMarkers.length === 0) return;
+
+      try {
+        // Generate timeline content
+        let output = `TELEPROMPTER EDITING GUIDE\n`;
+        output += `${'='.repeat(60)}\n`;
+        output += `Session: ${sessionId}\n`;
+        output += `Auto-backup: ${new Date().toLocaleString()}\n`;
+        output += `${'='.repeat(60)}\n\n`;
+
+        // Group markers by script
+        scripts.forEach(script => {
+          const scriptMarkers = problemMarkers.filter(m => m.scriptId === script.id);
+          if (scriptMarkers.length === 0) return;
+
+          output += `SCRIPT: ${script.name}\n`;
+          output += `${'-'.repeat(40)}\n`;
+
+          const sortedMarkers = [...scriptMarkers].sort((a, b) => a.scriptTime - b.scriptTime);
+          sortedMarkers.forEach(marker => {
+            const emoji = { 'retake': '🔴', 'stumble': '⚠️', 'note': '📝', 'playback-started': '▶️', 'playback-stopped': '⏸️' };
+            output += `${formatTime(marker.scriptTime)} - ${emoji[marker.type] || marker.type.toUpperCase()}`;
+            if (marker.note) output += ` - "${marker.note}"`;
+            output += `\n`;
+          });
+          output += `\n`;
+        });
+
+        // Summary
+        output += `${'='.repeat(60)}\n`;
+        output += `SUMMARY: ${problemMarkers.length} markers total\n`;
+        output += `${'='.repeat(60)}\n`;
+
+        // Send to main process for backup
+        await ipcRenderer.invoke('backup-timeline', { content: output, sessionId });
+      } catch (err) {
+        console.error('Auto-backup failed:', err);
+      }
     }
 
     function showNoteModal() {
@@ -570,6 +619,11 @@
     inlineMarkerStumble.addEventListener('click', () => addProblemMarker('stumble'));
     inlineMarkerNote.addEventListener('click', () => addProblemMarker('note'));
 
+    // Timeline marker button handlers
+    timelineMarkerRetake.addEventListener('click', () => addProblemMarker('retake'));
+    timelineMarkerStumble.addEventListener('click', () => addProblemMarker('stumble'));
+    timelineMarkerNote.addEventListener('click', () => addProblemMarker('note'));
+
     // ============================================
     // RECORDING TIMER
     // ============================================
@@ -598,6 +652,11 @@
       headerRecordingTimer.style.display = 'flex';
       controlPanelHeader.style.display = 'flex';
       showTimeline(); // Switch to timeline view
+
+      // Enable timeline marker buttons
+      timelineMarkerRetake.disabled = false;
+      timelineMarkerStumble.disabled = false;
+      timelineMarkerNote.disabled = false;
       console.log('Recording UI elements shown');
 
       // Start timer
@@ -629,6 +688,11 @@
       headerRecordingTimer.style.display = 'none';
       controlPanelHeader.style.display = 'none';
       showControls(); // Switch back to controls view
+
+      // Disable timeline marker buttons
+      timelineMarkerRetake.disabled = true;
+      timelineMarkerStumble.disabled = true;
+      timelineMarkerNote.disabled = true;
       console.log('Recording stopped. Total markers:', problemMarkers.length);
 
       // Show export reminder modal
@@ -1712,9 +1776,21 @@
       const cursorPos = scriptText.selectionStart;
       const totalChars = scriptText.value.length;
       if (totalChars > 0) {
-        const percent = Math.round((cursorPos / totalChars) * 100);
+        // Calculate percentage based on line position for better accuracy
+        const textBefore = scriptText.value.substring(0, cursorPos);
+        const linesBefore = textBefore.split('\n').length;
+        const totalLines = scriptText.value.split('\n').length;
+        const percent = Math.min(100, Math.max(0, Math.round((linesBefore / totalLines) * 100)));
+
         positionSlider.value = percent;
         positionValue.textContent = percent + '%';
+
+        // Also update monitor position
+        targetPosition = percent;
+        applyMonitorPosition(percent);
+        monitorProgressBar.style.width = percent + '%';
+        monitorPercent.textContent = percent + '%';
+
         sendPlaybackState(true);
       }
     });
@@ -1736,26 +1812,53 @@
       // Wrap around if not found after current position
       if (index === -1) {
         index = scriptContent.indexOf(searchText);
+        if (index === lastFindIndex && scriptContent.indexOf(searchText, index + 1) === -1) {
+          // Only one match exists, stay there
+        }
       }
 
       if (index !== -1) {
         lastFindIndex = index;
-        const totalChars = scriptText.value.length;
-        const percent = Math.round((index / totalChars) * 100);
+
+        // Calculate percentage based on line position for better accuracy
+        const textBefore = scriptText.value.substring(0, index);
+        const linesBefore = textBefore.split('\n').length;
+        const totalLines = scriptText.value.split('\n').length;
+        const percent = Math.min(100, Math.max(0, Math.round((linesBefore / totalLines) * 100)));
 
         // Update position slider and teleprompter
         positionSlider.value = percent;
         positionValue.textContent = percent + '%';
+
+        // Also update monitor position
+        targetPosition = percent;
+        applyMonitorPosition(percent);
+        monitorProgressBar.style.width = percent + '%';
+        monitorPercent.textContent = percent + '%';
+
         sendPlaybackState(true);
 
-        // Also highlight in editor
+        // Highlight in editor and scroll to it
         scriptText.focus();
         scriptText.setSelectionRange(index, index + searchText.length);
 
-        // Switch to editor view if in monitor
-        viewEditorBtn.click();
+        // Scroll textarea to show the selected text
+        const lineHeight = parseInt(window.getComputedStyle(scriptText).lineHeight) || 24;
+        const targetScroll = (linesBefore - 3) * lineHeight;
+        scriptText.scrollTop = Math.max(0, targetScroll);
+
+        // Show feedback
+        findTextInput.style.borderColor = 'var(--success)';
+        setTimeout(() => {
+          findTextInput.style.borderColor = '';
+        }, 500);
       } else {
         lastFindIndex = 0;
+        // Show not found feedback
+        findTextInput.style.borderColor = 'var(--danger)';
+        setTimeout(() => {
+          findTextInput.style.borderColor = '';
+        }, 500);
       }
     }
 
@@ -1812,27 +1915,36 @@
 
     editFromMonitorBtn.addEventListener('click', () => {
       isMonitorEditing = !isMonitorEditing;
+      console.log('📝 Edit button clicked, isMonitorEditing:', isMonitorEditing);
 
       if (isMonitorEditing) {
-        // Enable editing
+        // Enable editing - convert HTML spans to plain text for proper editing
+        const plainText = monitorScriptText.textContent;
+        monitorScriptText.textContent = plainText; // Removes all span wrappers
         monitorScriptText.contentEditable = 'true';
         monitorScriptText.style.cursor = 'text';
         monitorScriptText.style.outline = '2px solid var(--accent-primary)';
         monitorScriptText.style.borderRadius = '4px';
+        monitorScriptText.style.whiteSpace = 'pre-wrap'; // Preserve line breaks
         editFromMonitorBtn.classList.add('success');
         editFromMonitorBtn.innerHTML = '<svg viewBox="0 0 24 24" style="width: 12px; height: 12px;"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Done';
+        // Focus the text so user can start typing immediately
+        monitorScriptText.focus();
+        console.log('   Edit mode enabled, text converted to plain text');
       } else {
         // Disable editing and sync back to editor
         monitorScriptText.contentEditable = 'false';
         monitorScriptText.style.cursor = '';
         monitorScriptText.style.outline = '';
+        monitorScriptText.style.whiteSpace = '';
         editFromMonitorBtn.classList.remove('success');
         editFromMonitorBtn.innerHTML = '<svg viewBox="0 0 24 24" style="width: 12px; height: 12px;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg> Edit';
 
-        // Sync edited content back to editor (extract text from HTML)
+        // Sync edited content back to editor
         scriptText.value = monitorScriptText.textContent;
         updateCharCount();
-        sendScript();
+        sendScript(); // This will re-wrap words in spans via updateMonitorPreview
+        console.log('   Edit mode disabled, synced back to editor');
       }
     });
 
@@ -1898,25 +2010,67 @@
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
-      // Skip shortcuts when typing in any input field
-      if (e.target === scriptText) return;
-      if (e.target.isContentEditable) return;
-      if (e.target.tagName === 'INPUT') return; // Skip for all input fields (modals, etc.)
-      if (e.target.tagName === 'TEXTAREA') return;
+      console.log('🎹 Keydown:', e.code, 'Target:', e.target.tagName, 'ID:', e.target.id);
+
+      // For spacebar, check if monitor view is active - if so, always trigger play/pause
+      // (unless actively typing in find input, a modal input, or editing in monitor)
+      if (e.code === 'Space') {
+        const monitorActive = monitorView.classList.contains('active');
+        const isInFindInput = e.target.id === 'findTextInput';
+        const isInModalInput = e.target.closest('.modal-content');
+
+        console.log('   Space pressed - Monitor active:', monitorActive, 'Find input:', isInFindInput, 'Modal:', !!isInModalInput, 'isMonitorEditing:', isMonitorEditing);
+
+        // Allow spacebar for play/pause if monitor is active and not in specific inputs or editing
+        if (monitorActive && !isInFindInput && !isInModalInput && !isMonitorEditing) {
+          console.log('   ✅ Space key - triggering play/pause (monitor view active)');
+          e.preventDefault();
+          headerPlayPauseBtn.click();
+          return;
+        }
+      }
+
+      // Arrow keys for speed - ALWAYS work (except in textareas/contentEditable where vertical nav matters)
+      if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+        // Skip only for textarea and contentEditable
+        if (e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
+          return;
+        }
+
+        e.preventDefault();
+        if (e.code === 'ArrowUp') {
+          speedSlider.value = Math.min(100, parseInt(speedSlider.value) + 5);
+        } else {
+          speedSlider.value = Math.max(1, parseInt(speedSlider.value) - 5);
+        }
+        speedValue.textContent = speedSlider.value;
+        // Only send speed update, not playback state change (to avoid interrupting countdown)
+        ipcRenderer.send('speed-update', { speed: parseInt(speedSlider.value) });
+        return;
+      }
+
+      // Skip other shortcuts when typing in any input field
+      if (e.target === scriptText) {
+        console.log('   Skipping - scriptText focused');
+        return;
+      }
+      if (e.target.isContentEditable) {
+        console.log('   Skipping - contentEditable focused');
+        return;
+      }
+      if (e.target.tagName === 'INPUT') {
+        console.log('   Skipping - INPUT focused');
+        return;
+      }
+      if (e.target.tagName === 'TEXTAREA') {
+        console.log('   Skipping - TEXTAREA focused');
+        return;
+      }
 
       if (e.code === 'Space') {
+        console.log('   ✅ Space key - triggering play/pause');
         e.preventDefault();
         headerPlayPauseBtn.click();
-      } else if (e.code === 'ArrowUp') {
-        e.preventDefault();
-        speedSlider.value = Math.min(100, parseInt(speedSlider.value) + 5);
-        speedValue.textContent = speedSlider.value;
-        sendPlaybackState();
-      } else if (e.code === 'ArrowDown') {
-        e.preventDefault();
-        speedSlider.value = Math.max(1, parseInt(speedSlider.value) - 5);
-        speedValue.textContent = speedSlider.value;
-        sendPlaybackState();
       } else if (e.code === 'Home') {
         e.preventDefault();
         document.getElementById('jumpStartBtn').click();
@@ -1964,8 +2118,9 @@
       if (e.deltaY === 0) return;
 
       // Accumulate scroll input toward target position
-      const sensitivity = 0.08;
-      const maxDelta = 2;
+      // Lower sensitivity = less touchy scrolling
+      const sensitivity = 0.03;
+      const maxDelta = 1.5;
       const rawDelta = e.deltaY * sensitivity;
       const delta = Math.sign(rawDelta) * Math.min(Math.abs(rawDelta), maxDelta);
       targetPosition = Math.min(100, Math.max(0, targetPosition + delta));
@@ -1981,6 +2136,21 @@
         sendPlaybackState(true);
       }, 100);
     }, { passive: false });
+
+    // Click on monitor to enable keyboard shortcuts (blur any focused inputs)
+    // But NOT when editing in monitor view
+    monitorContainer.addEventListener('click', (e) => {
+      // Skip if in edit mode or clicking on editable text
+      if (isMonitorEditing) return;
+      if (e.target.id === 'monitorScriptText') return;
+      if (e.target.closest('#monitorScriptText')) return;
+
+      // Only blur if clicking on the container itself or its children (not buttons/controls)
+      if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') {
+        document.activeElement.blur();
+        console.log('🎯 Monitor clicked - inputs blurred for keyboard shortcuts');
+      }
+    });
 
     // Initial
     sendSettings();
@@ -2135,6 +2305,11 @@
     // Refresh Warning (Development Only)
     // =======================================
     let allowRefresh = false;
+
+    // Allow app to close without warning when quitting
+    ipcRenderer.on('app-closing', () => {
+      allowRefresh = true;
+    });
 
     // Catch Cmd+R / Ctrl+R / F5
     document.addEventListener('keydown', (e) => {
