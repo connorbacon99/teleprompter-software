@@ -52,6 +52,11 @@
     let currentDisplayId = null;
     let cueMarkers = [];
     let currentProjectPath = null;
+
+    // Stub function for removed cue feature
+    function renderCueList() {
+      // Cue feature removed - stub to prevent errors
+    }
     let monitorPosition = 0;
     let teleprompterDimensions = { width: 1920, height: 1080 }; // Updated when teleprompter opens
     let monitorCountdownInterval = null;
