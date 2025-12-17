@@ -51,12 +51,20 @@ function createLocalServer() {
     };
 
     localServer = http.createServer((req, res) => {
-      let filePath = path.join(__dirname, req.url === '/' ? 'operator.html' : req.url);
+      let requestedPath = req.url === '/' ? 'operator.html' : req.url;
+      // Remove leading slash if present
+      if (requestedPath.startsWith('/')) {
+        requestedPath = requestedPath.substring(1);
+      }
+      let filePath = path.join(__dirname, requestedPath);
       const ext = path.extname(filePath).toLowerCase();
       const contentType = mimeTypes[ext] || 'application/octet-stream';
 
+      console.log(`Local server request: ${req.url} -> ${filePath}`);
+
       fs.readFile(filePath, (err, content) => {
         if (err) {
+          console.error(`Failed to read file: ${filePath}`, err.message);
           res.writeHead(404);
           res.end('Not Found');
         } else {
@@ -725,22 +733,29 @@ ipcMain.on('jump-to-position', (event, percent) => {
 
 // Open file dialog
 ipcMain.handle('open-file-dialog', async () => {
-  const result = await dialog.showOpenDialog(operatorWindow, {
-    properties: ['openFile'],
-    filters: [
-      { name: 'Documents', extensions: ['docx', 'pptx', 'txt', 'rtf'] },
-      { name: 'PowerPoint', extensions: ['pptx'] },
-      { name: 'Word Documents', extensions: ['docx'] },
-      { name: 'Text Files', extensions: ['txt'] },
-      { name: 'All Files', extensions: ['*'] }
-    ]
-  });
+  console.log('open-file-dialog called, operatorWindow:', !!operatorWindow);
+  try {
+    const result = await dialog.showOpenDialog(operatorWindow, {
+      properties: ['openFile'],
+      filters: [
+        { name: 'Documents', extensions: ['docx', 'pptx', 'txt', 'rtf'] },
+        { name: 'PowerPoint', extensions: ['pptx'] },
+        { name: 'Word Documents', extensions: ['docx'] },
+        { name: 'Text Files', extensions: ['txt'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
 
-  if (result.canceled || result.filePaths.length === 0) {
-    return null;
+    console.log('Dialog result:', result);
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+
+    return result.filePaths[0];
+  } catch (err) {
+    console.error('open-file-dialog error:', err);
+    throw err;
   }
-
-  return result.filePaths[0];
 });
 
 // Extract speaker notes from PowerPoint file
@@ -865,16 +880,17 @@ ipcMain.handle('save-project', async (event, projectData) => {
 
 // Export script to Word document
 ipcMain.handle('export-docx', async (event, scriptText, suggestedName) => {
-  const result = await dialog.showSaveDialog(operatorWindow, {
-    filters: [{ name: 'Word Document', extensions: ['docx'] }],
-    defaultPath: suggestedName || 'Script.docx'
-  });
-
-  if (result.canceled) {
-    return { success: false };
-  }
-
+  console.log('export-docx called');
   try {
+    const result = await dialog.showSaveDialog(operatorWindow, {
+      filters: [{ name: 'Word Document', extensions: ['docx'] }],
+      defaultPath: suggestedName || 'Script.docx'
+    });
+
+    if (result.canceled) {
+      return { success: false };
+    }
+
     // Split script into paragraphs and create document
     const paragraphs = scriptText.split('\n').map(line =>
       new Paragraph({
@@ -893,6 +909,7 @@ ipcMain.handle('export-docx', async (event, scriptText, suggestedName) => {
     fs.writeFileSync(result.filePath, buffer);
     return { success: true, filePath: result.filePath };
   } catch (error) {
+    console.error('export-docx error:', error);
     return { success: false, error: error.message };
   }
 });

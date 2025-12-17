@@ -1428,21 +1428,29 @@
 
     // Open file
     document.getElementById('openFileBtn').addEventListener('click', async () => {
-      const filePath = await ipcRenderer.invoke('open-file-dialog');
-      if (filePath) {
-        const result = await ipcRenderer.invoke('read-file', filePath);
-        if (result.success) {
-          scriptText.value = result.content;
-          fileName.textContent = result.fileName;
-          updateCharCount();
-          cueMarkers = [];
-          renderCueList();
-          sendScript();
-          updateMonitorText();
-          updateMonitorPosition({ percent: 0 });
-        } else {
-          alert('Error reading file: ' + result.error);
+      console.log('Open button clicked');
+      try {
+        console.log('Calling open-file-dialog...');
+        const filePath = await ipcRenderer.invoke('open-file-dialog');
+        console.log('File path returned:', filePath);
+        if (filePath) {
+          const result = await ipcRenderer.invoke('read-file', filePath);
+          if (result.success) {
+            scriptText.value = result.content;
+            fileName.textContent = result.fileName;
+            updateCharCount();
+            cueMarkers = [];
+            renderCueList();
+            sendScript();
+            updateMonitorText();
+            updateMonitorPosition({ percent: 0 });
+          } else {
+            alert('Error reading file: ' + result.error);
+          }
         }
+      } catch (err) {
+        console.error('Open file error:', err);
+        alert('Error opening file: ' + err.message);
       }
     });
 
