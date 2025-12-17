@@ -84,6 +84,12 @@
       Start Recording
     </button>
 
+    <!-- Recording Timer in Header -->
+    <div class="header-recording-timer" id="headerRecordingTimer" style="display: none;">
+      <div class="recording-dot-small"></div>
+      <span class="header-timer" id="headerSessionTimer">00:00:00</span>
+    </div>
+
     <div class="file-indicator">
       <span class="dot"></span>
       <span id="fileName">No file loaded</span>
@@ -173,10 +179,6 @@
               <div class="status-dot" id="monitorStatusDot"></div>
               <span id="monitorStatusText">Ready</span>
             </div>
-            <button class="btn" id="addCueFromMonitorBtn" style="padding: 4px 8px; font-size: 10px;">
-              <svg viewBox="0 0 24 24" style="width: 12px; height: 12px;"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-              Add Cue
-            </button>
             <button class="btn" id="editFromMonitorBtn" style="padding: 4px 8px; font-size: 10px;">
               <svg viewBox="0 0 24 24" style="width: 12px; height: 12px;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
               Edit
@@ -244,49 +246,28 @@
           <input type="range" id="speedSlider" min="1" max="100" value="30">
         </div>
 
-        <!-- Voice Follow -->
-        <div class="voice-follow-section">
-          <div class="voice-follow-header">
-            <label for="voiceFollowCheckbox">
-              <svg class="mic-icon" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
-              Voice Follow
-            </label>
-            <label class="toggle">
-              <input type="checkbox" id="voiceFollowCheckbox">
-              <span class="toggle-slider"></span>
-            </label>
+      </div>
+
+      <!-- Recording Section (shown when recording) -->
+      <div class="control-section recording-section" id="recordingSection" style="display: none;">
+        <div class="section-header">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="currentColor"/></svg>
+          <h3>Recording</h3>
+          <div class="recording-timer-inline" id="recordingTimerInline">
+            <div class="recording-dot-inline"></div>
+            <span id="inlineSessionTimer">00:00:00</span>
           </div>
-          <!-- Whisper Info -->
-          <div style="font-size: 10px; color: var(--text-tertiary); margin-bottom: 8px;">
-            Uses Whisper AI - runs locally, free. First use downloads ~280MB model.
-          </div>
-          <!-- Whisper Model Status -->
-          <div id="whisperModelStatus" style="display: none; margin-bottom: 8px; padding: 8px; background: var(--bg-tertiary); border-radius: var(--radius-sm); font-size: 11px;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <div id="whisperModelSpinner" class="spinner" style="width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite;"></div>
-              <span id="whisperModelStatusText">Loading Whisper model...</span>
-            </div>
-            <div id="whisperModelProgress" style="margin-top: 6px; height: 4px; background: var(--bg-secondary); border-radius: 2px; overflow: hidden;">
-              <div id="whisperModelProgressBar" style="height: 100%; background: var(--accent); width: 0%; transition: width 0.3s;"></div>
-            </div>
-          </div>
-          <div class="voice-input-select" style="margin-bottom: 8px;">
-            <select id="audioInputSelect" style="width: 100%; padding: 6px 8px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 11px;">
-              <option value="">Default Microphone</option>
-            </select>
-          </div>
-          <div class="voice-status" id="voiceStatus">
-            <div class="voice-indicator"></div>
-            <span id="voiceStatusText">Off</span>
-            <button class="btn" id="voicePauseBtn" style="display: none; margin-left: auto; padding: 2px 8px; font-size: 10px;">Pause</button>
-          </div>
-          <div class="voice-transcript" id="voiceTranscript" style="display: none;">
-            Listening...
-          </div>
-          <div class="voice-debug" id="voiceDebug" style="display: none; margin-top: 6px; padding: 6px; background: var(--bg-tertiary); border-radius: var(--radius-sm); font-size: 10px; color: var(--text-secondary);">
-            <div>Word: <span id="debugMatchedWord" style="color: #22c55e; font-weight: bold;">-</span></div>
-            <div>Index: <span id="debugWordIndex">0</span> / <span id="debugTotalWords">0</span></div>
-          </div>
+        </div>
+        <div class="marker-buttons-inline">
+          <button class="marker-btn-inline retake" id="inlineMarkerRetake">
+            <span>🔴</span> Retake
+          </button>
+          <button class="marker-btn-inline stumble" id="inlineMarkerStumble">
+            <span>⚠️</span> Stumble
+          </button>
+          <button class="marker-btn-inline note" id="inlineMarkerNote">
+            <span>📝</span> Note
+          </button>
         </div>
       </div>
 
@@ -317,13 +298,12 @@
         </div>
       </div>
 
-      <!-- Appearance & Cues Tabs -->
+      <!-- Appearance & Remote Tabs -->
       <div class="control-section">
         <div class="section-header">
           <svg viewBox="0 0 24 24"><path d="M12 2l-5.5 9h11z"/><circle cx="17.5" cy="17.5" r="4.5"/><path d="M3 13.5h8v8H3z"/></svg>
           <select id="settingsTabSelect" class="settings-tab-select">
             <option value="appearance">Appearance</option>
-            <option value="cues">Cue Markers</option>
             <option value="remote">Remote Control</option>
           </select>
         </div>
@@ -380,17 +360,6 @@
           </div>
         </div>
 
-        <!-- Cue Markers Tab -->
-        <div class="tab-content" id="tab-cues">
-          <button class="btn" id="addCueBtn" style="width: 100%; justify-content: center; margin-bottom: 10px;">
-            <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-            Add Cue at Cursor
-          </button>
-          <div class="cue-list" id="cueList">
-            <div class="no-cues">No cue markers. Add markers to quickly jump to sections.</div>
-          </div>
-        </div>
-
         <!-- Remote Tab -->
         <div class="tab-content" id="tab-remote">
           <div class="remote-status">
@@ -426,6 +395,10 @@
           <span>Jump Start/End</span>
           <kbd class="kbd">Home</kbd> <kbd class="kbd">End</kbd>
         </div>
+        <div class="hint-row">
+          <span>Close Display</span>
+          <kbd class="kbd">Esc</kbd>
+        </div>
       </div>
 
       <!-- Marker Timeline Panel - Phase 2 Feature -->
@@ -456,18 +429,6 @@
 
     </aside>
   </main>
-
-  <!-- Cue Name Modal -->
-  <div class="modal-overlay" id="cueModal">
-    <div class="modal">
-      <h3>Add Cue Marker</h3>
-      <input type="text" id="cueNameInput" placeholder="Enter cue name...">
-      <div class="modal-buttons">
-        <button class="btn" id="cueCancelBtn">Cancel</button>
-        <button class="btn primary" id="cueSaveBtn">Add Cue</button>
-      </div>
-    </div>
-  </div>
 
   <!-- Script Rename Modal -->
   <div class="modal-overlay" id="renameModal">
@@ -580,38 +541,6 @@
         <button class="btn" id="exportReminderLaterBtn">Maybe Later</button>
         <button class="btn primary" id="exportReminderExportBtn">Export Timeline</button>
       </div>
-    </div>
-  </div>
-
-  <!-- Problem Marker Toolbar - Phase 1 Feature -->
-  <div class="marker-toolbar" id="markerToolbar" style="display: none;">
-    <button class="marker-btn retake" id="markerRetake">
-      <span class="marker-btn-icon">🔴</span>
-      <span>Retake</span>
-    </button>
-    <button class="marker-btn stumble" id="markerStumble">
-      <span class="marker-btn-icon">⚠️</span>
-      <span>Stumble</span>
-    </button>
-    <button class="marker-btn note" id="markerNote">
-      <span class="marker-btn-icon">📝</span>
-      <span>Note</span>
-    </button>
-  </div>
-
-  <!-- Recording Timer - Phase 1 Feature -->
-  <div class="recording-status" id="recordingStatus">
-    <div class="recording-indicator">
-      <div class="recording-dot"></div>
-      <span>RECORDING</span>
-    </div>
-    <div>
-      <div class="timer-label">Session Time</div>
-      <div class="timer-display" id="sessionTimer">00:00:00</div>
-    </div>
-    <div>
-      <div class="timer-label">Script Time</div>
-      <div class="timer-display" id="scriptTimer" style="font-size: 20px;">00:00</div>
     </div>
   </div>
 

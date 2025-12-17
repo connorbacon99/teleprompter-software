@@ -59,16 +59,44 @@
       margin-top: 20px;
     }
 
-    /* Reading guide - horizontal line at center */
+    /* Reading guide - arrow indicators at center */
     .reading-guide {
       position: fixed;
       top: 50%;
       left: 0;
       right: 0;
-      height: 2px;
-      background: rgba(59, 130, 246, 0.4);
+      height: 0;
+      background: transparent;
       pointer-events: none;
       z-index: 100;
+    }
+
+    /* Left arrow indicator */
+    .reading-guide::before {
+      content: '';
+      position: absolute;
+      left: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0;
+      height: 0;
+      border-top: 50px solid transparent;
+      border-bottom: 50px solid transparent;
+      border-left: 60px solid rgba(255, 220, 0, 0.85);
+    }
+
+    /* Right arrow indicator */
+    .reading-guide::after {
+      content: '';
+      position: absolute;
+      right: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0;
+      height: 0;
+      border-top: 50px solid transparent;
+      border-bottom: 50px solid transparent;
+      border-right: 60px solid rgba(255, 220, 0, 0.85);
     }
 
     /* Gradient overlays for readability */
@@ -556,17 +584,7 @@
       }
     }
 
-    // Voice follow uses continuous smooth following
-    ipcRenderer.on('voice-follow-position', (event, percent) => {
-      setFollowTarget(percent);
-    });
-
-    // Stop voice follow mode
-    ipcRenderer.on('voice-follow-stop', () => {
-      stopFollowMode();
-    });
-
-    // Jump to specific position (for cue markers - instant jump, not voice follow)
+    // Jump to specific position (for cue markers - instant jump)
     ipcRenderer.on('jump-to-position', (event, percent) => {
       // Stop any voice follow animation
       stopFollowMode();
@@ -586,6 +604,13 @@
     }, 100);
 
     document.addEventListener('contextmenu', e => e.preventDefault());
+
+    // Escape key closes the display
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Escape') {
+        ipcRenderer.invoke('close-teleprompter');
+      }
+    });
   </script>
 </body>
 </html>

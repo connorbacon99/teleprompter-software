@@ -34,8 +34,7 @@ let currentState = {
     flip: false,
     countdownEnabled: true,
     countdownSeconds: 3
-  },
-  cueMarkers: []
+  }
 };
 
 // Create local HTTP server for serving operator.html (needed for Web Speech API)
@@ -233,20 +232,6 @@ function startRemoteServer(port = 8080) {
         const { speed } = JSON.parse(body);
         currentState.speed = speed;
         broadcastState();
-        res.writeHead(200);
-        res.end('OK');
-      });
-      return;
-    }
-
-    if (url.pathname === '/api/jump-to-cue' && req.method === 'POST') {
-      let body = '';
-      req.on('data', chunk => body += chunk);
-      req.on('end', () => {
-        const { index } = JSON.parse(body);
-        if (operatorWindow) {
-          operatorWindow.webContents.send('jump-to-cue', index);
-        }
         res.writeHead(200);
         res.end('OK');
       });
@@ -485,40 +470,6 @@ function getRemoteControlHTML() {
       padding: 12px 8px;
       font-size: 14px;
     }
-    .cue-list {
-      background: #18181b;
-      border: 1px solid #27272a;
-      border-radius: 12px;
-      padding: 16px;
-      margin-top: 20px;
-    }
-    .cue-list h3 {
-      font-size: 13px;
-      color: #71717a;
-      margin-bottom: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .cue-item {
-      background: #27272a;
-      border-radius: 8px;
-      padding: 12px 16px;
-      margin-bottom: 8px;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-    .cue-item:active {
-      background: #3f3f46;
-    }
-    .cue-item:last-child {
-      margin-bottom: 0;
-    }
-    .no-cues {
-      color: #71717a;
-      font-size: 14px;
-      text-align: center;
-      padding: 20px;
-    }
     /* Loading state - show content only when connected */
     .controls { opacity: 0.3; pointer-events: none; transition: opacity 0.3s; }
     body.connected .controls { opacity: 1; pointer-events: auto; }
@@ -574,16 +525,10 @@ function getRemoteControlHTML() {
       </div>
     </div>
 
-    <div class="cue-list">
-      <h3>Cue Markers</h3>
-      <div id="cueList">
-        <div class="no-cues">No cue markers set</div>
-      </div>
-    </div>
   </div>
 
   <script>
-    let state = { isPlaying: false, speed: 30, cueMarkers: [] };
+    let state = { isPlaying: false, speed: 30 };
     let connected = false;
 
     async function fetchState() {
@@ -614,15 +559,6 @@ function getRemoteControlHTML() {
         document.getElementById('positionSlider').value = Math.round(state.position);
         document.getElementById('positionDisplay').textContent = Math.round(state.position) + '%';
       }
-
-      const cueList = document.getElementById('cueList');
-      if (state.cueMarkers && state.cueMarkers.length > 0) {
-        cueList.innerHTML = state.cueMarkers.map((cue, i) =>
-          '<div class="cue-item" onclick="jumpToCue(' + i + ')">' + cue.name + '</div>'
-        ).join('');
-      } else {
-        cueList.innerHTML = '<div class="no-cues">No cue markers set</div>';
-      }
     }
 
     async function togglePlay() {
@@ -651,14 +587,6 @@ function getRemoteControlHTML() {
         body: JSON.stringify({ speed: state.speed })
       });
       updateUI();
-    }
-
-    async function jumpToCue(index) {
-      await fetch('/api/jump-to-cue', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ index })
-      });
     }
 
     function updatePositionDisplay() {
@@ -733,7 +661,6 @@ ipcMain.handle('close-teleprompter', () => {
 // Send script to teleprompter
 ipcMain.on('send-script', (event, scriptData) => {
   currentState.script = scriptData.text;
-  currentState.cueMarkers = scriptData.cueMarkers || [];
   if (teleprompterWindow) {
     teleprompterWindow.webContents.send('update-script', scriptData);
   }
@@ -966,6 +893,46 @@ ipcMain.handle('export-docx', async (event, scriptText, suggestedName) => {
     fs.writeFileSync(result.filePath, buffer);
     return { success: true, filePath: result.filePath };
   } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Save text file (for exporting editing guides)
+ipcMain.handle('save-text-file', async (event, { content, defaultName }) => {
+  // Determine file type from defaultName extension
+  const ext = path.extname(defaultName).slice(1) || 'txt';
+  const filterName = ext === 'csv' ? 'CSV File' : 'Text File';
+
+  const result = await dialog.showSaveDialog(operatorWindow, {
+    filters: [{ name: filterName, extensions: [ext] }],
+    defaultPath: defaultName
+  });
+
+  if (result.canceled) {
+    return { success: false };
+  }
+
+  try {
+    fs.writeFileSync(result.filePath, content);
+    return { success: true, filePath: result.filePath };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Autosave session
+ipcMain.handle('autosave-session', async (event, autosaveData) => {
+  try {
+    const autosaveDir = path.join(app.getPath('userData'), 'autosave');
+    if (!fs.existsSync(autosaveDir)) {
+      fs.mkdirSync(autosaveDir, { recursive: true });
+    }
+
+    const autosavePath = path.join(autosaveDir, 'session.json');
+    fs.writeFileSync(autosavePath, JSON.stringify(autosaveData, null, 2));
+    return { success: true };
+  } catch (error) {
+    console.error('Autosave error:', error);
     return { success: false, error: error.message };
   }
 });

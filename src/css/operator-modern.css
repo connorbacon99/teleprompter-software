@@ -706,14 +706,126 @@ body {
    PROBLEM MARKERS - Floating Action Bar
    ============================================ */
 
+/* Header Recording Timer */
+.header-recording-timer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(244, 63, 94, 0.15);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  border-radius: var(--radius-md);
+  margin-left: 8px;
+}
+
+.recording-dot-small {
+  width: 8px;
+  height: 8px;
+  background: var(--danger);
+  border-radius: 50%;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.header-timer {
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+/* Inline Recording Section in Control Panel */
+.recording-section {
+  border-color: rgba(244, 63, 94, 0.3) !important;
+  background: linear-gradient(135deg, rgba(244, 63, 94, 0.05) 0%, var(--bg-glass) 100%) !important;
+}
+
+.recording-section .section-header {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.recording-section .section-header svg {
+  color: var(--danger);
+}
+
+.recording-section .section-header h3 {
+  color: var(--danger);
+}
+
+.recording-timer-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 4px 10px;
+  background: rgba(244, 63, 94, 0.15);
+  border-radius: var(--radius-sm);
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.recording-dot-inline {
+  width: 8px;
+  height: 8px;
+  background: var(--danger);
+  border-radius: 50%;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.marker-buttons-inline {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.marker-btn-inline {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--glass-light);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.marker-btn-inline:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.marker-btn-inline.retake:hover {
+  background: rgba(244, 63, 94, 0.1);
+  border-color: var(--danger);
+}
+
+.marker-btn-inline.stumble:hover {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: var(--warning);
+}
+
+.marker-btn-inline.note:hover {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: var(--accent);
+}
+
 .marker-toolbar {
   position: fixed;
   bottom: 80px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 12px;
-  padding: 12px 20px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px 12px;
   background: var(--bg-elevated);
   backdrop-filter: blur(var(--blur-lg)) saturate(180%);
   -webkit-backdrop-filter: blur(var(--blur-lg)) saturate(180%);
@@ -722,6 +834,39 @@ body {
   box-shadow: var(--shadow-xl), 0 0 40px rgba(0,0,0,0.6);
   z-index: 10000;
   animation: slideUp var(--transition-slow) var(--transition-bounce);
+  cursor: default;
+}
+
+.marker-toolbar.dragging {
+  animation: none;
+  cursor: grabbing;
+}
+
+.marker-toolbar-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 8px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  cursor: grab;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.marker-toolbar-handle:hover {
+  background: var(--glass-light);
+  color: var(--text-secondary);
+}
+
+.marker-toolbar-handle:active {
+  cursor: grabbing;
+}
+
+.marker-toolbar-buttons {
+  display: flex;
+  gap: 12px;
 }
 
 @keyframes slideUp {
@@ -1322,10 +1467,38 @@ button:focus-visible {
       position: absolute;
       top: 50%;
       left: 0; right: 0;
-      height: 2px;
-      background: rgba(59, 130, 246, 0.4);
+      height: 0;
+      background: transparent;
       pointer-events: none;
       z-index: 100;
+    }
+
+    /* Left arrow indicator */
+    .monitor-preview .reading-guide::before {
+      content: '';
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0;
+      height: 0;
+      border-top: 40px solid transparent;
+      border-bottom: 40px solid transparent;
+      border-left: 48px solid rgba(255, 220, 0, 0.85);
+    }
+
+    /* Right arrow indicator */
+    .monitor-preview .reading-guide::after {
+      content: '';
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0;
+      height: 0;
+      border-top: 40px solid transparent;
+      border-bottom: 40px solid transparent;
+      border-right: 48px solid rgba(255, 220, 0, 0.85);
     }
 
     .monitor-preview .gradient-bottom {
@@ -1355,16 +1528,29 @@ button:focus-visible {
       font-family: Arial, Helvetica, sans-serif;
     }
 
-    /* Word highlight for voice follow position in monitor */
+    /* Text selection styling in monitor - bright yellow for visibility */
+    .monitor-preview .script-text::selection {
+      background-color: rgba(255, 220, 0, 0.9);
+      color: #000;
+    }
+
+    .monitor-preview .script-text *::selection {
+      background-color: rgba(255, 220, 0, 0.9);
+      color: #000;
+    }
+
+    /* Word highlight for click position in monitor */
     .monitor-preview .script-text .monitor-word {
       transition: background-color 0.15s ease;
     }
 
     .monitor-preview .script-text .monitor-word.highlighted {
-      background-color: rgba(139, 92, 246, 0.5);
+      background-color: rgba(255, 220, 0, 0.85);
+      color: #000;
       border-radius: 4px;
-      padding: 0 4px;
-      margin: 0 -4px;
+      padding: 2px 6px;
+      margin: 0 -6px;
+      box-shadow: 0 0 8px rgba(255, 220, 0, 0.6);
     }
 
     /* Progress bar */
@@ -1559,7 +1745,8 @@ button:focus-visible {
       border-left: 1px solid var(--border-subtle);
       display: flex;
       flex-direction: column;
-      overflow: hidden;
+      overflow-y: auto;
+      overflow-x: hidden;
     }
 
     /* Direct children need padding */
