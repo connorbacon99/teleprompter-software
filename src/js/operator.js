@@ -2185,7 +2185,15 @@
 
     // Handle update status messages from main process
     ipcRenderer.on('update-status', (event, data) => {
+      console.log('📬 Update status received:', data.status, data);
       switch (data.status) {
+        case 'checking':
+          // Show checking state in banner if visible
+          if (updateBanner.classList.contains('visible')) {
+            updateText.innerHTML = 'Checking for updates...';
+          }
+          break;
+
         case 'available':
           updateState = 'available';
           updateVersion.textContent = `(v${data.version})`;
@@ -2210,8 +2218,12 @@
           break;
 
         case 'error':
-          updateState = 'idle';
-          hideUpdateBanner();
+          console.log('❌ Update error:', data.message);
+          updateState = 'available';
+          updateActionBtn.textContent = 'Retry Download';
+          updateActionBtn.disabled = false;
+          updateText.innerHTML = `Error: ${data.message}`;
+          // Don't hide banner - show the error
           break;
 
         case 'not-available':

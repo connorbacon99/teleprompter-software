@@ -1099,8 +1099,13 @@ ipcMain.handle('download-update', async () => {
 });
 
 ipcMain.handle('install-update', () => {
+  console.log('🔄 Install update requested');
   if (autoUpdater) {
+    console.log('   Quitting and installing...');
+    // Force close all windows and install
     autoUpdater.quitAndInstall(false, true);
+  } else {
+    console.log('   Error: autoUpdater not available');
   }
 });
 
@@ -1184,12 +1189,18 @@ app.whenReady().then(async () => {
 
     autoUpdater.on('error', (err) => {
       console.log('❌ Auto-updater error:', err.message);
+      console.log('   Full error:', err);
       if (operatorWindow) {
         operatorWindow.webContents.send('update-status', {
           status: 'error',
           message: err.message
         });
       }
+    });
+
+    // Handle before-quit-for-update event
+    autoUpdater.on('before-quit-for-update', () => {
+      console.log('🔄 App will quit for update installation');
     });
   } catch (err) {
     console.log('Auto-updater not available:', err.message);
