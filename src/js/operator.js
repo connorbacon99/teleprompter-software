@@ -2263,6 +2263,9 @@
         }
       } else if (updateState === 'downloaded') {
         console.log('   Installing update...');
+        updateActionBtn.textContent = 'Restarting...';
+        updateActionBtn.disabled = true;
+        // Main process will send app-closing signal to allow quit
         await ipcRenderer.invoke('install-update');
       }
     });

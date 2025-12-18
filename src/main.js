@@ -1101,9 +1101,17 @@ ipcMain.handle('download-update', async () => {
 ipcMain.handle('install-update', () => {
   console.log('🔄 Install update requested');
   if (autoUpdater) {
-    console.log('   Quitting and installing...');
-    // Force close all windows and install
-    autoUpdater.quitAndInstall(false, true);
+    console.log('   Sending app-closing signal to allow quit...');
+    // Send signal to renderer to allow close without beforeunload warning
+    if (operatorWindow && operatorWindow.webContents) {
+      operatorWindow.webContents.send('app-closing');
+    }
+
+    // Small delay to ensure renderer processes the signal
+    setTimeout(() => {
+      console.log('   Quitting and installing...');
+      autoUpdater.quitAndInstall(false, true);
+    }, 100);
   } else {
     console.log('   Error: autoUpdater not available');
   }
