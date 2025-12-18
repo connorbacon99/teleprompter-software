@@ -1,6 +1,6 @@
 {
   "name": "umbrellaprompter",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "Professional teleprompter software for studio use",
   "main": "src/main.js",
   "scripts": {
