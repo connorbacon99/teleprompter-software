@@ -132,18 +132,31 @@
       </div>
 
       <div class="script-header">
-        <h2>Script</h2>
-        <div class="script-meta">
-          <div class="view-toggle">
-            <button class="btn active" id="viewEditorBtn">Editor</button>
-            <button class="btn" id="viewMonitorBtn">Monitor</button>
+        <div class="script-header-top">
+          <h2>Script</h2>
+          <div class="view-toggle-large">
+            <button class="view-btn active" id="viewEditorBtn">
+              <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+              Editor
+            </button>
+            <button class="view-btn" id="viewMonitorBtn">
+              <svg viewBox="0 0 24 24"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg>
+              Monitor
+            </button>
           </div>
           <span class="char-count" id="charCount">0 characters</span>
-          <button class="btn btn-sm" id="jumpToCursorBtn" title="Jump teleprompter to cursor position">
-            <svg viewBox="0 0 24 24"><path d="M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z"/></svg>
-            Jump to Cursor
+        </div>
+        <div class="script-tools">
+          <button class="btn btn-tool" id="clearHighlightBtn" title="Clear emphasis highlight">
+            <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+            Clear Highlight
           </button>
-          <button class="btn btn-sm" id="cleanUpBtn" title="Remove extra blank lines">
+          <button class="btn btn-tool" id="jumpViewBtn" title="Jump to other view with selection highlighted">
+            <svg class="jump-to-monitor-icon" viewBox="0 0 24 24"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg>
+            <svg class="jump-to-editor-icon" style="display:none" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+            <span class="jump-btn-text">Jump to Monitor</span>
+          </button>
+          <button class="btn btn-tool" id="cleanUpBtn" title="Remove extra blank lines">
             <svg viewBox="0 0 24 24"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>
             Clean Up
           </button>

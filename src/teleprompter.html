@@ -48,6 +48,21 @@
       word-wrap: break-word;
     }
 
+    /* Instructor emphasis highlight */
+    .teleprompter-word.emphasis-highlight {
+      background-color: rgba(139, 92, 246, 0.7);
+      color: #fff;
+      border-radius: 8px;
+      padding: 4px 8px;
+      margin: 0 -4px;
+    }
+
+    .emphasis-highlight-wrapper {
+      background-color: rgba(139, 92, 246, 0.7);
+      border-radius: 8px;
+      padding: 4px 0;
+    }
+
     /* Cue markers in display */
     .cue-marker {
       display: block;
@@ -393,8 +408,14 @@
       const range = startY - endY;
       const currentPercent = range > 0 ? ((startY - currentPosition) / range) * 100 : 0;
 
-      // Update script text
-      scriptText.textContent = data.text || 'No script loaded';
+      // Update script text with word wrapping for highlight support
+      const text = data.text || 'No script loaded';
+      scriptText.innerHTML = wrapTextForHighlighting(text);
+
+      // Reapply highlight if set
+      if (highlightStart !== null && highlightEnd !== null) {
+        applyHighlight();
+      }
 
       // Recalculate scroll height with new content
       const newScrollHeight = calculateScrollHeight();
@@ -596,6 +617,112 @@
       // Direct position update for cue markers
       updatePosition(percent);
     });
+
+    // Track highlight range
+    let highlightStart = null;
+    let highlightEnd = null;
+
+    // Receive highlight update from operator
+    ipcRenderer.on('update-highlight', (event, data) => {
+      console.log('Teleprompter received highlight:', data);
+      highlightStart = data.start;
+      highlightEnd = data.end;
+
+      // Ensure text is wrapped in spans (may not be if script loaded before highlight feature)
+      const existingWords = scriptText.querySelectorAll('.teleprompter-word');
+      console.log('Existing word spans:', existingWords.length);
+      if (existingWords.length === 0 && scriptText.textContent.trim()) {
+        console.log('Wrapping text for highlighting...');
+        scriptText.innerHTML = wrapTextForHighlighting(scriptText.textContent);
+      }
+
+      applyHighlight();
+    });
+
+    // Apply highlight to teleprompter text
+    function applyHighlight() {
+      console.log('applyHighlight called:', highlightStart, highlightEnd);
+      if (highlightStart === null || highlightEnd === null) {
+        // Clear highlights
+        const wrapper = scriptText.querySelector('.emphasis-highlight-wrapper');
+        if (wrapper) {
+          while (wrapper.firstChild) {
+            wrapper.parentNode.insertBefore(wrapper.firstChild, wrapper);
+          }
+          wrapper.remove();
+        }
+        scriptText.querySelectorAll('.emphasis-highlight').forEach(el => {
+          el.classList.remove('emphasis-highlight');
+        });
+        return;
+      }
+
+      // Find words in range and highlight
+      const words = scriptText.querySelectorAll('.teleprompter-word[data-char-index]');
+      let firstHighlighted = null;
+      let lastHighlighted = null;
+
+      words.forEach(word => {
+        word.classList.remove('emphasis-highlight');
+        const charIndex = parseInt(word.dataset.charIndex);
+        const wordLength = word.textContent.length;
+        const wordEnd = charIndex + wordLength;
+
+        if (charIndex < highlightEnd && wordEnd > highlightStart) {
+          word.classList.add('emphasis-highlight');
+          if (!firstHighlighted) firstHighlighted = word;
+          lastHighlighted = word;
+        }
+      });
+
+      // Wrap continuous highlight
+      if (firstHighlighted && lastHighlighted && firstHighlighted !== lastHighlighted) {
+        // Remove old wrapper first
+        const oldWrapper = scriptText.querySelector('.emphasis-highlight-wrapper');
+        if (oldWrapper) {
+          while (oldWrapper.firstChild) {
+            oldWrapper.parentNode.insertBefore(oldWrapper.firstChild, oldWrapper);
+          }
+          oldWrapper.remove();
+        }
+
+        const range = document.createRange();
+        range.setStartBefore(firstHighlighted);
+        range.setEndAfter(lastHighlighted);
+
+        const wrapper = document.createElement('span');
+        wrapper.className = 'emphasis-highlight-wrapper';
+
+        try {
+          range.surroundContents(wrapper);
+          wrapper.querySelectorAll('.emphasis-highlight').forEach(el => {
+            el.classList.remove('emphasis-highlight');
+          });
+        } catch (e) {
+          // Fall back to individual highlights
+        }
+      }
+    }
+
+    // Wrap text in spans for highlighting (called when script updates)
+    function wrapTextForHighlighting(text) {
+      const tokens = text.split(/(\s+)/);
+      let charIndex = 0;
+      let html = '';
+
+      for (const token of tokens) {
+        if (token.match(/^\s+$/)) {
+          html += token;
+          charIndex += token.length;
+        } else if (token.trim()) {
+          const escapedWord = token.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          html += `<span class="teleprompter-word" data-char-index="${charIndex}">${escapedWord}</span>`;
+          charIndex += token.length;
+        }
+      }
+
+      return html;
+    }
 
     // Initialize
     window.addEventListener('resize', () => {

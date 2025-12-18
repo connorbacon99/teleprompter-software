@@ -120,6 +120,10 @@
     let lastEditorCursorPosition = 0;    // Cursor position in editor
     let lastEditorScrollTop = 0;         // Scroll position in editor
 
+    // Persistent highlight range for instructor emphasis
+    let persistentHighlightStart = null;
+    let persistentHighlightEnd = null;
+
     // Initialize with default script
     scripts.push({
       id: 'main',
@@ -1218,6 +1222,9 @@
         scriptText.scrollTop = lastEditorScrollTop;
         scriptText.setSelectionRange(lastEditorCursorPosition, lastEditorCursorPosition);
       }
+
+      // Update jump button state
+      if (typeof updateJumpButtonState === 'function') updateJumpButtonState();
     });
 
     viewMonitorBtn.addEventListener('click', () => {
@@ -1225,12 +1232,50 @@
       lastEditorCursorPosition = scriptText.selectionStart;
       lastEditorScrollTop = scriptText.scrollTop;
 
+      // Check if there's a text selection in the editor (save before switching)
+      const selectionStart = scriptText.selectionStart;
+      const selectionEnd = scriptText.selectionEnd;
+      const hasSelection = selectionStart !== selectionEnd;
+
+      // Store selection as persistent highlight if there is one
+      if (hasSelection) {
+        persistentHighlightStart = selectionStart;
+        persistentHighlightEnd = selectionEnd;
+        // Sync to teleprompter
+        syncHighlightToTeleprompter();
+      }
+
       viewMonitorBtn.classList.add('active');
       viewEditorBtn.classList.remove('active');
       monitorView.classList.add('active');
       editorView.classList.remove('active');
-      // Initialize monitor scaling
+      // Initialize monitor scaling (this rebuilds the text spans and applies persistent highlight)
       updateMonitorScale();
+
+      // Scroll to the highlighted text if there was a selection
+      if (hasSelection) {
+        requestAnimationFrame(() => {
+          // Find first highlighted element to scroll to
+          const firstHighlighted = monitorScriptText.querySelector('.editor-highlight-wrapper, .editor-highlight');
+          if (firstHighlighted) {
+            const textHeight = monitorScriptWrapper.scrollHeight;
+            const wordTop = firstHighlighted.offsetTop;
+            const percent = Math.min(100, Math.max(0, Math.round((wordTop / textHeight) * 100)));
+
+            // Update position and apply
+            targetPosition = percent;
+            currentDisplayPosition = percent;
+            applyMonitorPosition(percent);
+            positionSlider.value = percent;
+            if (positionValueHeader) positionValueHeader.textContent = percent + '%';
+            monitorProgressBar.style.width = percent + '%';
+            monitorPercent.textContent = percent + '%';
+          }
+        });
+      }
+
+      // Update jump button state
+      if (typeof updateJumpButtonState === 'function') updateJumpButtonState();
     });
 
     // Scale the monitor preview to fit the container
@@ -1288,6 +1333,78 @@
       }
 
       monitorScriptText.innerHTML = html;
+
+      // Reapply persistent highlight if set
+      applyPersistentHighlight();
+    }
+
+    // Apply persistent highlight to monitor text (for instructor emphasis)
+    function applyPersistentHighlight() {
+      if (persistentHighlightStart === null || persistentHighlightEnd === null) return;
+
+      const words = monitorScriptText.querySelectorAll('.monitor-word[data-char-index]');
+      let firstHighlighted = null;
+      let lastHighlighted = null;
+
+      words.forEach(word => {
+        const charIndex = parseInt(word.dataset.charIndex);
+        const wordLength = word.textContent.length;
+        const wordEnd = charIndex + wordLength;
+
+        if (charIndex < persistentHighlightEnd && wordEnd > persistentHighlightStart) {
+          word.classList.add('editor-highlight');
+          if (!firstHighlighted) firstHighlighted = word;
+          lastHighlighted = word;
+        }
+      });
+
+      // Wrap all content between first and last highlighted word
+      if (firstHighlighted && lastHighlighted && firstHighlighted !== lastHighlighted) {
+        const range = document.createRange();
+        range.setStartBefore(firstHighlighted);
+        range.setEndAfter(lastHighlighted);
+
+        const wrapper = document.createElement('span');
+        wrapper.className = 'editor-highlight-wrapper';
+        wrapper.style.cssText = 'background-color: rgba(139, 92, 246, 0.7); border-radius: 4px;';
+
+        try {
+          range.surroundContents(wrapper);
+          wrapper.querySelectorAll('.editor-highlight').forEach(el => {
+            el.classList.remove('editor-highlight');
+          });
+        } catch (e) {
+          // Fall back to individual highlights
+        }
+      }
+    }
+
+    // Clear persistent highlight
+    function clearPersistentHighlight() {
+      persistentHighlightStart = null;
+      persistentHighlightEnd = null;
+      const wrapper = monitorScriptText.querySelector('.editor-highlight-wrapper');
+      if (wrapper) {
+        // Unwrap content
+        while (wrapper.firstChild) {
+          wrapper.parentNode.insertBefore(wrapper.firstChild, wrapper);
+        }
+        wrapper.remove();
+      }
+      monitorScriptText.querySelectorAll('.editor-highlight').forEach(el => {
+        el.classList.remove('editor-highlight');
+      });
+      // Also clear on teleprompter
+      ipcRenderer.send('update-highlight', { start: null, end: null });
+    }
+
+    // Send current highlight to teleprompter
+    function syncHighlightToTeleprompter() {
+      console.log('Sending highlight to teleprompter:', persistentHighlightStart, persistentHighlightEnd);
+      ipcRenderer.send('update-highlight', {
+        start: persistentHighlightStart,
+        end: persistentHighlightEnd
+      });
     }
 
     // Highlight a word in the monitor view by index
@@ -1340,10 +1457,19 @@
 
     // Receive position updates from teleprompter
     ipcRenderer.on('monitor-position', (event, positionData) => {
+      const percent = positionData.percent || 0;
+
+      // Sync position
+      targetPosition = percent;
+      currentDisplayPosition = percent;
+
       updateMonitorPosition(positionData);
-      positionSlider.value = positionData.percent || 0;
+      positionSlider.value = percent;
       if (document.getElementById('positionValue')) {
-        document.getElementById('positionValue').textContent = Math.round(positionData.percent || 0) + '%';
+        document.getElementById('positionValue').textContent = Math.round(percent) + '%';
+      }
+      if (positionValueHeader) {
+        positionValueHeader.textContent = Math.round(percent) + '%';
       }
     });
 
@@ -1355,8 +1481,13 @@
       }
       updateMonitorText();
       updateMonitorScale();
-      // Initialize position at start
-      applyMonitorPosition(0);
+      // Preserve current position instead of resetting to 0
+      applyMonitorPosition(targetPosition);
+
+      // Sync highlight to newly opened teleprompter
+      if (persistentHighlightStart !== null && persistentHighlightEnd !== null) {
+        syncHighlightToTeleprompter();
+      }
     });
 
     // Handle window resize
@@ -1414,26 +1545,10 @@
 
     scriptText.addEventListener('input', updateCharCount);
 
-    // Jump to Cursor - teleprompter jumps to cursor position in editor
-    document.getElementById('jumpToCursorBtn').addEventListener('click', () => {
-      const cursorPos = scriptText.selectionStart;
-      const textBefore = scriptText.value.substring(0, cursorPos);
-      const linesBefore = textBefore.split('\n').length;
-      const totalLines = scriptText.value.split('\n').length;
-      const percent = Math.min(100, Math.max(0, Math.round((linesBefore / totalLines) * 100)));
 
-      // Update position slider
-      positionSlider.value = percent;
-      if (positionValueHeader) positionValueHeader.textContent = percent + '%';
-
-      // Update monitor position
-      targetPosition = percent;
-      applyMonitorPosition(percent);
-      monitorProgressBar.style.width = percent + '%';
-      monitorPercent.textContent = percent + '%';
-
-      // Send to teleprompter
-      sendPlaybackState(true);
+    // Clear emphasis highlight
+    document.getElementById('clearHighlightBtn').addEventListener('click', () => {
+      clearPersistentHighlight();
     });
 
     // Clean up script - remove extra blank lines and bracketed text
@@ -1633,6 +1748,8 @@
 
       if (!isPlaying && countdownCheckbox.checked) {
         console.log('⏱️ Starting with countdown enabled');
+        // Send current position to teleprompter BEFORE countdown starts
+        sendPlaybackState(true);
         // Start countdown on both teleprompter and monitor preview
         const seconds = parseInt(countdownSeconds.value);
         ipcRenderer.send('start-countdown', seconds);
@@ -1655,6 +1772,8 @@
           if (isRecording) {
             addProblemMarker('playback-stopped', '⏸️ Playback Stopped');
           }
+          // Send pause without position - teleprompter stops where it is
+          sendPlaybackState(false);
         } else {
           console.log('▶️ Started playing - adding marker');
           // Start recording when playback starts
@@ -1665,10 +1784,10 @@
           // Add automatic "Playback Started" marker for video editing
           console.log('🎬 Adding auto playback started marker');
           addProblemMarker('playback-started', '▶️ Playback Started');
+          // Include position when starting so playback continues from current spot
+          sendPlaybackState(true);
         }
         updatePlayButton();
-        // Always include position so playback continues from current spot
-        sendPlaybackState(true);
       }
     });
 
@@ -1855,9 +1974,24 @@
     }
 
     fontFamilySelect.addEventListener('change', sendSettings);
+
+    // Font size: simple approach - just preserve current percentage
+    let fontSizeDebounceTimer = null;
+
     fontSizeInput.addEventListener('input', () => {
       fontSizeValue.textContent = fontSizeInput.value;
-      sendSettings();
+
+      // Update font size in monitor immediately for visual feedback
+      monitorScriptText.style.fontSize = fontSizeInput.value + 'px';
+
+      // Re-apply current position (percentage stays same, but pixel calc updates for new text height)
+      applyMonitorPosition(targetPosition);
+
+      // Debounce sending to teleprompter
+      clearTimeout(fontSizeDebounceTimer);
+      fontSizeDebounceTimer = setTimeout(() => {
+        sendSettings();
+      }, 150);
     });
     textColorInput.addEventListener('change', sendSettings);
     bgColorInput.addEventListener('change', sendSettings);
@@ -1914,41 +2048,42 @@
         // Sync edited content back to editor
         scriptText.value = monitorScriptText.textContent;
         updateCharCount();
-        sendScript(); // This will re-wrap words in spans via updateMonitorPreview
+        sendScript();
+        // Rebuild word spans for highlighting to work
+        updateMonitorText();
         console.log('   Edit mode disabled, synced back to editor');
       }
     });
 
-    // Click/Selection sync: click in monitor positions editor, selection switches to editor
+    // Click/Selection in monitor: set persistent highlight (shows reader where to start)
     monitorScriptText.addEventListener('mouseup', (e) => {
       if (isMonitorEditing) return; // Don't sync during editing
 
       const selection = window.getSelection();
 
       if (selection.rangeCount > 0 && !selection.isCollapsed) {
-        // User selected text - switch to editor and select it
+        // User selected text - set as persistent highlight (stay in monitor view)
         const selectedText = selection.toString();
         if (selectedText.trim()) {
           const editorText = scriptText.value;
           const startIndex = editorText.indexOf(selectedText);
 
           if (startIndex !== -1) {
-            // Switch to editor view and select the text
-            viewEditorBtn.classList.add('active');
-            viewMonitorBtn.classList.remove('active');
-            editorView.classList.add('active');
-            monitorView.classList.remove('active');
+            // Clear old highlight first
+            clearPersistentHighlight();
 
-            // Focus and select in editor
-            scriptText.focus();
-            scriptText.setSelectionRange(startIndex, startIndex + selectedText.length);
+            // Set persistent highlight
+            persistentHighlightStart = startIndex;
+            persistentHighlightEnd = startIndex + selectedText.length;
 
-            // Scroll the selection into view (center it in the textarea)
-            const textBeforeSelection = scriptText.value.substring(0, startIndex);
-            const linesBefore = textBeforeSelection.split('\n').length;
-            const lineHeight = parseInt(window.getComputedStyle(scriptText).lineHeight) || 20;
-            const targetScroll = (linesBefore * lineHeight) - (scriptText.clientHeight / 2);
-            scriptText.scrollTop = Math.max(0, targetScroll);
+            // Apply highlight to monitor
+            applyPersistentHighlight();
+
+            // Sync to teleprompter
+            syncHighlightToTeleprompter();
+
+            // Clear browser selection so it doesn't look doubled
+            selection.removeAllRanges();
           }
         }
       } else {
@@ -1960,6 +2095,84 @@
           // Store position for when we switch to editor
           lastMonitorClickPosition = charIndex;
         }
+      }
+    });
+
+    // Contextual jump button - changes behavior based on current view
+    const jumpViewBtn = document.getElementById('jumpViewBtn');
+    const jumpBtnText = jumpViewBtn.querySelector('.jump-btn-text');
+    const jumpToMonitorIcon = jumpViewBtn.querySelector('.jump-to-monitor-icon');
+    const jumpToEditorIcon = jumpViewBtn.querySelector('.jump-to-editor-icon');
+
+    function updateJumpButtonState() {
+      const isEditorView = editorView.classList.contains('active');
+      if (isEditorView) {
+        jumpBtnText.textContent = 'Jump to Monitor';
+        jumpToMonitorIcon.style.display = '';
+        jumpToEditorIcon.style.display = 'none';
+        jumpViewBtn.title = 'Jump to Monitor view with selection highlighted';
+      } else {
+        jumpBtnText.textContent = 'Jump to Editor';
+        jumpToMonitorIcon.style.display = 'none';
+        jumpToEditorIcon.style.display = '';
+        jumpViewBtn.title = 'Jump to Editor view with highlighted text selected';
+      }
+    }
+
+    jumpViewBtn.addEventListener('click', () => {
+      const isEditorView = editorView.classList.contains('active');
+
+      if (isEditorView) {
+        // In Editor - jump to Monitor with selection highlighted
+        const selectionStart = scriptText.selectionStart;
+        const selectionEnd = scriptText.selectionEnd;
+        const hasSelection = selectionStart !== selectionEnd;
+
+        if (hasSelection) {
+          persistentHighlightStart = selectionStart;
+          persistentHighlightEnd = selectionEnd;
+          syncHighlightToTeleprompter();
+        }
+
+        // Switch to monitor view
+        viewMonitorBtn.click();
+      } else {
+        // In Monitor - jump to Editor with highlighted text selected
+        if (persistentHighlightStart === null || persistentHighlightEnd === null) {
+          // No highlight set, just switch to editor
+          viewEditorBtn.click();
+          return;
+        }
+
+        // Switch to editor view
+        viewEditorBtn.classList.add('active');
+        viewMonitorBtn.classList.remove('active');
+        editorView.classList.add('active');
+        monitorView.classList.remove('active');
+        updateJumpButtonState();
+
+        // Focus and select the highlighted text in editor
+        scriptText.focus();
+        scriptText.setSelectionRange(persistentHighlightStart, persistentHighlightEnd);
+
+        // Scroll the selection into view
+        const measureDiv = document.createElement('div');
+        const styles = window.getComputedStyle(scriptText);
+        measureDiv.style.cssText = `
+          position: absolute;
+          visibility: hidden;
+          white-space: pre-wrap;
+          word-wrap: break-word;
+          width: ${scriptText.clientWidth}px;
+          font: ${styles.font};
+          padding: ${styles.padding};
+          line-height: ${styles.lineHeight};
+        `;
+        measureDiv.textContent = scriptText.value.substring(0, persistentHighlightStart);
+        document.body.appendChild(measureDiv);
+        const targetScroll = measureDiv.offsetHeight - (scriptText.clientHeight / 2);
+        document.body.removeChild(measureDiv);
+        scriptText.scrollTop = Math.max(0, targetScroll);
       }
     });
 
@@ -1992,13 +2205,6 @@
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
       console.log('🎹 Keydown:', e.code, 'Target:', e.target.tagName, 'ID:', e.target.id);
-
-      // Cmd+J / Ctrl+J - Jump to Cursor (works from editor)
-      if ((e.metaKey || e.ctrlKey) && e.code === 'KeyJ') {
-        e.preventDefault();
-        document.getElementById('jumpToCursorBtn').click();
-        return;
-      }
 
       // For spacebar, check if monitor view is active - if so, always trigger play/pause
       // (unless actively typing in find input, a modal input, or editing in monitor)

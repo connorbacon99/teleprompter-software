@@ -2250,8 +2250,26 @@ button:focus-visible {
       padding: 12px 20px;
       border-bottom: 1px solid var(--border-subtle);
       display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .script-header-top {
+      display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
+      gap: 16px;
+      position: relative;
+    }
+
+    .script-header-top h2 {
+      position: absolute;
+      left: 0;
+    }
+
+    .script-header-top .char-count {
+      position: absolute;
+      right: 0;
     }
 
     .script-header h2 {
@@ -2261,10 +2279,86 @@ button:focus-visible {
       letter-spacing: 0.02em;
     }
 
-    .script-meta { display: flex; gap: 16px; align-items: center; }
     .char-count { font-size: 11px; color: var(--text-tertiary); }
 
-    /* View toggle buttons */
+    /* Large view toggle buttons - prominent Editor/Monitor switch */
+    .view-toggle-large {
+      display: flex;
+      gap: 4px;
+      background: var(--bg-tertiary);
+      padding: 4px;
+      border-radius: var(--radius-md);
+    }
+
+    .view-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+
+    .view-btn svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+    }
+
+    .view-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .view-btn.active {
+      background: var(--accent);
+      color: white;
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* Script tools row - utility buttons */
+    .script-tools {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 6px;
+    }
+
+    .btn-tool {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 500;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+
+    .btn-tool svg {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+    }
+
+    .btn-tool:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+      border-color: var(--border-primary);
+    }
+
+    /* Legacy view toggle (keep for compatibility) */
     .view-toggle { display: flex; gap: 4px; }
     .view-toggle .btn { padding: 4px 10px; font-size: 11px; }
     .view-toggle .btn.active { background: var(--accent); border-color: var(--accent); color: white; }
@@ -2316,6 +2410,9 @@ button:focus-visible {
       position: absolute;
       inset: 0;
       overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
     }
 
     /* This is a clone of the teleprompter - renders at teleprompter size, then scaled */
@@ -2325,8 +2422,9 @@ button:focus-visible {
       width: 1920px;
       height: 1080px;
       background: #000;
-      transform-origin: 0 0;
+      transform-origin: center center;
       overflow: hidden;
+      flex-shrink: 0;
     }
 
     /* Inner container for mirror/flip - uses center origin so flip works correctly */
@@ -2396,8 +2494,8 @@ button:focus-visible {
       position: absolute;
       width: 100%;
       padding: 10% 15%;
-      /* Smooth transition between position updates (updates come ~6x per second) */
-      transition: transform 0.15s linear;
+      will-change: transform;
+      transition: transform 80ms linear;
     }
 
     .monitor-preview .script-text {
@@ -2433,6 +2531,18 @@ button:focus-visible {
       padding: 2px 6px;
       margin: 0 -6px;
       box-shadow: 0 0 8px rgba(255, 220, 0, 0.6);
+    }
+
+    /* Editor selection highlight - distinct from voice highlight */
+    .monitor-preview .script-text .monitor-word.editor-highlight {
+      background-color: rgba(139, 92, 246, 0.7);
+      color: #fff;
+      border-radius: 4px;
+      padding: 2px 0.4em;
+      margin: 0 -0.2em;
+      box-shadow: 0 0 8px rgba(139, 92, 246, 0.5);
+      box-decoration-break: clone;
+      -webkit-box-decoration-break: clone;
     }
 
     /* Progress bar */

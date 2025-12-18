@@ -149,7 +149,8 @@ function createTeleprompterWindow(displayId) {
     title: 'Teleprompter Display',
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false
+      contextIsolation: false,
+      backgroundThrottling: false  // Prevent animation throttling when window not focused
     }
   });
 
@@ -162,6 +163,13 @@ function createTeleprompterWindow(displayId) {
         width: width,
         height: height
       });
+      // Return focus to operator window after a short delay so user can control playback
+      setTimeout(() => {
+        if (operatorWindow) {
+          operatorWindow.focus();
+          operatorWindow.webContents.focus();
+        }
+      }, 300);
     }
   });
 
@@ -745,6 +753,14 @@ ipcMain.on('voice-follow-stop', () => {
 ipcMain.on('jump-to-position', (event, percent) => {
   if (teleprompterWindow) {
     teleprompterWindow.webContents.send('jump-to-position', percent);
+  }
+});
+
+// Update highlight on teleprompter (for instructor emphasis)
+ipcMain.on('update-highlight', (event, highlightData) => {
+  console.log('Main process received highlight:', highlightData, 'teleprompterWindow exists:', !!teleprompterWindow);
+  if (teleprompterWindow) {
+    teleprompterWindow.webContents.send('update-highlight', highlightData);
   }
 });
 
