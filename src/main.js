@@ -272,7 +272,8 @@ function startRemoteServer(port = 8080) {
 
     // Serve remote control HTML
     if (url.pathname === '/' || url.pathname === '/remote') {
-      res.writeHead(200, { 'Content-Type': 'text/html' });
+      console.log('📱 Remote control page requested from:', req.socket.remoteAddress);
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(getRemoteControlHTML());
       return;
     }

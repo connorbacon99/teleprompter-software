@@ -115,6 +115,11 @@
     const MAX_AUTOSAVES = 5;
     const AUTOSAVE_INTERVAL = 30000; // 30 seconds
 
+    // View position memory - remember cursor/scroll positions when switching views
+    let lastMonitorClickPosition = null; // Character index clicked in monitor
+    let lastEditorCursorPosition = 0;    // Cursor position in editor
+    let lastEditorScrollTop = 0;         // Scroll position in editor
+
     // Initialize with default script
     scripts.push({
       id: 'main',
@@ -1182,20 +1187,44 @@
       monitorCountdownOverlay.classList.remove('visible');
     }
 
-    // View switching
+    // View switching with position memory
     viewEditorBtn.addEventListener('click', () => {
       viewEditorBtn.classList.add('active');
       viewMonitorBtn.classList.remove('active');
       editorView.classList.add('active');
       monitorView.classList.remove('active');
+
       // Cancel any running monitor scroll animation when switching away from monitor view
       if (scrollAnimationId) {
         cancelAnimationFrame(scrollAnimationId);
         scrollAnimationId = null;
       }
+
+      // If user clicked on a word in monitor, position cursor there
+      if (lastMonitorClickPosition !== null) {
+        scriptText.focus();
+        scriptText.setSelectionRange(lastMonitorClickPosition, lastMonitorClickPosition);
+
+        // Scroll to show the cursor position
+        const textBefore = scriptText.value.substring(0, lastMonitorClickPosition);
+        const linesBefore = textBefore.split('\n').length;
+        const lineHeight = parseInt(window.getComputedStyle(scriptText).lineHeight) || 20;
+        const targetScroll = (linesBefore * lineHeight) - (scriptText.clientHeight / 2);
+        scriptText.scrollTop = Math.max(0, targetScroll);
+
+        lastMonitorClickPosition = null; // Reset after use
+      } else {
+        // Restore last editor position
+        scriptText.scrollTop = lastEditorScrollTop;
+        scriptText.setSelectionRange(lastEditorCursorPosition, lastEditorCursorPosition);
+      }
     });
 
     viewMonitorBtn.addEventListener('click', () => {
+      // Save editor position before switching
+      lastEditorCursorPosition = scriptText.selectionStart;
+      lastEditorScrollTop = scriptText.scrollTop;
+
       viewMonitorBtn.classList.add('active');
       viewEditorBtn.classList.remove('active');
       monitorView.classList.add('active');
@@ -1241,17 +1270,20 @@
       // This preserves the exact layout while wrapping words in spans
       const tokens = text.split(/(\s+)/);
       let wordIndex = 0;
+      let charIndex = 0;
       let html = '';
 
       for (const token of tokens) {
         if (token.match(/^\s+$/)) {
           // Whitespace - preserve exactly (including newlines)
           html += token;
+          charIndex += token.length;
         } else if (token.trim()) {
-          // Word - wrap in span with data attribute
+          // Word - wrap in span with data attributes for word index and char position
           const escapedWord = token.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-          html += `<span class="monitor-word" data-word-index="${wordIndex}">${escapedWord}</span>`;
+          html += `<span class="monitor-word" data-word-index="${wordIndex}" data-char-index="${charIndex}">${escapedWord}</span>`;
           wordIndex++;
+          charIndex += token.length;
         }
       }
 
@@ -1381,6 +1413,28 @@
     }
 
     scriptText.addEventListener('input', updateCharCount);
+
+    // Jump to Cursor - teleprompter jumps to cursor position in editor
+    document.getElementById('jumpToCursorBtn').addEventListener('click', () => {
+      const cursorPos = scriptText.selectionStart;
+      const textBefore = scriptText.value.substring(0, cursorPos);
+      const linesBefore = textBefore.split('\n').length;
+      const totalLines = scriptText.value.split('\n').length;
+      const percent = Math.min(100, Math.max(0, Math.round((linesBefore / totalLines) * 100)));
+
+      // Update position slider
+      positionSlider.value = percent;
+      if (positionValueHeader) positionValueHeader.textContent = percent + '%';
+
+      // Update monitor position
+      targetPosition = percent;
+      applyMonitorPosition(percent);
+      monitorProgressBar.style.width = percent + '%';
+      monitorPercent.textContent = percent + '%';
+
+      // Send to teleprompter
+      sendPlaybackState(true);
+    });
 
     // Clean up script - remove extra blank lines and bracketed text
     document.getElementById('cleanUpBtn').addEventListener('click', () => {
@@ -1712,9 +1766,16 @@
     });
 
     let lastFindIndex = 0;
+    let lastSearchTerm = '';
     function findAndJump() {
       const searchText = findTextInput.value.toLowerCase();
       if (!searchText) return;
+
+      // Reset index if search term changed
+      if (searchText !== lastSearchTerm) {
+        lastFindIndex = -1;
+        lastSearchTerm = searchText;
+      }
 
       const scriptContent = scriptText.value.toLowerCase();
       let index = scriptContent.indexOf(searchText, lastFindIndex + 1);
@@ -1858,15 +1919,16 @@
       }
     });
 
-    // Selection sync: when selecting in monitor, highlight in editor
-    monitorScriptText.addEventListener('mouseup', () => {
+    // Click/Selection sync: click in monitor positions editor, selection switches to editor
+    monitorScriptText.addEventListener('mouseup', (e) => {
       if (isMonitorEditing) return; // Don't sync during editing
 
       const selection = window.getSelection();
+
       if (selection.rangeCount > 0 && !selection.isCollapsed) {
+        // User selected text - switch to editor and select it
         const selectedText = selection.toString();
         if (selectedText.trim()) {
-          // Find the selected text in the editor
           const editorText = scriptText.value;
           const startIndex = editorText.indexOf(selectedText);
 
@@ -1888,6 +1950,15 @@
             const targetScroll = (linesBefore * lineHeight) - (scriptText.clientHeight / 2);
             scriptText.scrollTop = Math.max(0, targetScroll);
           }
+        }
+      } else {
+        // User clicked without selecting - position editor cursor at click location
+        const clickedWord = e.target.closest('.monitor-word');
+        if (clickedWord && clickedWord.dataset.charIndex) {
+          const charIndex = parseInt(clickedWord.dataset.charIndex);
+
+          // Store position for when we switch to editor
+          lastMonitorClickPosition = charIndex;
         }
       }
     });
@@ -1921,6 +1992,13 @@
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
       console.log('🎹 Keydown:', e.code, 'Target:', e.target.tagName, 'ID:', e.target.id);
+
+      // Cmd+J / Ctrl+J - Jump to Cursor (works from editor)
+      if ((e.metaKey || e.ctrlKey) && e.code === 'KeyJ') {
+        e.preventDefault();
+        document.getElementById('jumpToCursorBtn').click();
+        return;
+      }
 
       // For spacebar, check if monitor view is active - if so, always trigger play/pause
       // (unless actively typing in find input, a modal input, or editing in monitor)
