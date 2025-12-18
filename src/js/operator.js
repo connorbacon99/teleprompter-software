@@ -2208,6 +2208,7 @@
           updateText.innerHTML = `Downloading update... <span>${percent}%</span>`;
           updateActionBtn.textContent = 'Downloading...';
           updateActionBtn.disabled = true;
+          showUpdateBanner(); // Ensure banner stays visible during download
           break;
 
         case 'downloaded':
@@ -2215,6 +2216,8 @@
           updateText.innerHTML = `Update ready <span>(v${data.version})</span>`;
           updateActionBtn.textContent = 'Restart Now';
           updateActionBtn.disabled = false;
+          showUpdateBanner(); // Ensure banner is visible
+          console.log('✅ Update downloaded and ready to install');
           break;
 
         case 'error':
