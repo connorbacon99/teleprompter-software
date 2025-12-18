@@ -544,6 +544,35 @@ teleprompter-software/
 
 ---
 
+### 2025-12-18 - v1.3.0: Control Panel UX Redesign
+- **Control Panel restructured into two panes:**
+  - **Display pane**: Display selection, appearance settings, playback options, remote control, shortcuts
+  - **Recording pane**: Speed/position controls, markers, timeline view
+- **Unified navigation between panes:**
+  - Purple accent nav buttons at top of each pane
+  - Display pane: "Recording" button with record icon
+  - Recording pane: Back arrow button to return to Display
+  - Consistent styling and interaction patterns
+- **Timeline auto-save improvements:**
+  - Timelines now saved to date-based subfolders (YYYY-MM-DD)
+  - Removed export reminder modal - replaced with non-blocking toast
+  - Toast shows "Timeline Saved" with filename and "Open Folder" button
+  - User must click to dismiss (no auto-dismiss)
+  - Updated stop recording modal tip to reflect auto-save
+- **UI/UX polish:**
+  - Section labels clarified ("Select Display" vs "Display" pane header)
+  - Improved hover effects on control sections
+  - Cleaner slider styling with custom thumb/track
+  - Marker buttons with grid layout (no text overflow)
+  - "Open Timelines Folder" accessible from both panes
+  - Removed redundant/confusing UI elements
+- **Code cleanup:**
+  - Removed unused export reminder modal HTML
+  - Removed showExportTimelineReminder() function
+  - Consolidated pane toggle logic
+
+---
+
 ## Codebase Cleanup Plan (Pre-v1.0.2 Release)
 
 ### Phase 1: HIGH PRIORITY - Bug Fixes & Critical Issues (COMPLETED)

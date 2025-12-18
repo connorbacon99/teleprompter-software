@@ -11,7 +11,6 @@
     const charCount = document.getElementById('charCount');
     const displaySelect = document.getElementById('displaySelect');
     const speedSlider = document.getElementById('speedSlider');
-    const speedValue = document.getElementById('speedValue');
     const positionSlider = document.getElementById('positionSlider');
     const fontFamilySelect = document.getElementById('fontFamilySelect');
     const fontSizeInput = document.getElementById('fontSizeInput');
@@ -74,28 +73,26 @@
     const addScriptTab = document.getElementById('addScriptTab');
     const headerRecordingTimer = document.getElementById('headerRecordingTimer');
     const headerSessionTimer = document.getElementById('headerSessionTimer');
-    // Inline recording section elements
-    const recordingSection = document.getElementById('recordingSection');
-    const inlineSessionTimer = document.getElementById('inlineSessionTimer');
-    const inlineMarkerRetake = document.getElementById('inlineMarkerRetake');
-    const inlineMarkerStumble = document.getElementById('inlineMarkerStumble');
-    const inlineMarkerNote = document.getElementById('inlineMarkerNote');
-    // Timeline marker buttons
-    const timelineMarkerRetake = document.getElementById('timelineMarkerRetake');
-    const timelineMarkerStumble = document.getElementById('timelineMarkerStumble');
-    const timelineMarkerNote = document.getElementById('timelineMarkerNote');
     const autosaveIndicator = document.getElementById('autosaveIndicator');
     const autosaveText = document.getElementById('autosaveText');
     const autosaveSpinner = document.getElementById('autosaveSpinner');
     const autosaveCheckmark = document.getElementById('autosaveCheckmark');
-    const markerTimeline = document.getElementById('markerTimeline');
-    const markerTimelineContent = document.getElementById('markerTimelineContent');
-    const markerCount = document.getElementById('markerCount');
-    const markerDuration = document.getElementById('markerDuration');
     const controlPanel = document.querySelector('.control-panel');
-    const controlPanelHeader = document.getElementById('controlPanelHeader');
-    const showTimelineBtn = document.getElementById('showTimelineBtn');
-    const showControlsBtn = document.getElementById('showControlsBtn');
+
+    // Setup and Recording panes
+    const setupPane = document.getElementById('setupPane');
+    const recordingPane = document.getElementById('recordingPane');
+    const showSetupBtn = document.getElementById('showSetupBtn');
+    const showRecordingToolsBtn = document.getElementById('showRecordingToolsBtn');
+
+    // Recording pane elements
+    const speedValueHeader = document.getElementById('speedValueHeader');
+    const positionValueHeader = document.getElementById('positionValueHeader');
+    const recordingMarkerRetake = document.getElementById('recordingMarkerRetake');
+    const recordingMarkerStumble = document.getElementById('recordingMarkerStumble');
+    const recordingMarkerNote = document.getElementById('recordingMarkerNote');
+    const recordingTimelineContent = document.getElementById('recordingTimelineContent');
+    const markerCountSmall = document.getElementById('markerCountSmall');
 
     // Multi-script session state
     let scripts = [];
@@ -173,8 +170,8 @@
         // Update file name display
         fileName.textContent = script.name;
 
-        // Update marker timeline UI
-        updateMarkerTimeline();
+        // Update recording timeline UI
+        updateRecordingTimeline();
 
         // Reset script timer
         if (isRecording) {
@@ -440,7 +437,7 @@
       });
 
       updateScriptTabs();
-      updateMarkerTimeline();
+      updateRecordingTimeline();
       showMarkerFeedback(type);
 
       // Auto-backup timeline after each marker is added
@@ -614,15 +611,16 @@
       console.log(`${emoji[type] || '•'} ${type.toUpperCase()} marker at ${formatTime(scriptStartTime ? Date.now() - scriptStartTime : 0)}`);
     }
 
-    // Marker button handlers (inline recording section)
-    inlineMarkerRetake.addEventListener('click', () => addProblemMarker('retake'));
-    inlineMarkerStumble.addEventListener('click', () => addProblemMarker('stumble'));
-    inlineMarkerNote.addEventListener('click', () => addProblemMarker('note'));
-
-    // Timeline marker button handlers
-    timelineMarkerRetake.addEventListener('click', () => addProblemMarker('retake'));
-    timelineMarkerStumble.addEventListener('click', () => addProblemMarker('stumble'));
-    timelineMarkerNote.addEventListener('click', () => addProblemMarker('note'));
+    // Recording pane marker button handlers
+    if (recordingMarkerRetake) {
+      recordingMarkerRetake.addEventListener('click', () => addProblemMarker('retake'));
+    }
+    if (recordingMarkerStumble) {
+      recordingMarkerStumble.addEventListener('click', () => addProblemMarker('stumble'));
+    }
+    if (recordingMarkerNote) {
+      recordingMarkerNote.addEventListener('click', () => addProblemMarker('note'));
+    }
 
     // ============================================
     // RECORDING TIMER
@@ -647,22 +645,16 @@
       toggleRecordingBtn.classList.remove('success');
       toggleRecordingBtn.classList.add('danger');
 
-      // Show UI elements
-      recordingSection.style.display = 'block';
+      // Show recording pane
       headerRecordingTimer.style.display = 'flex';
-      controlPanelHeader.style.display = 'flex';
-      showTimeline(); // Switch to timeline view
+      showRecordingPane();
 
-      // Enable timeline marker buttons
-      timelineMarkerRetake.disabled = false;
-      timelineMarkerStumble.disabled = false;
-      timelineMarkerNote.disabled = false;
       console.log('Recording UI elements shown');
 
       // Start timer
       timerInterval = setInterval(updateTimers, 1000);
       updateTimers();
-      updateMarkerTimeline();
+      updateRecordingTimeline();
       console.log('Recording started - Session ID:', sessionId);
     }
 
@@ -683,20 +675,20 @@
       toggleRecordingBtn.classList.remove('danger');
       toggleRecordingBtn.classList.add('success');
 
-      // Hide UI elements and switch back to controls
-      recordingSection.style.display = 'none';
+      // Hide recording timer and switch back to setup pane
       headerRecordingTimer.style.display = 'none';
-      controlPanelHeader.style.display = 'none';
-      showControls(); // Switch back to controls view
+      showSetupPane();
 
-      // Disable timeline marker buttons
-      timelineMarkerRetake.disabled = true;
-      timelineMarkerStumble.disabled = true;
-      timelineMarkerNote.disabled = true;
       console.log('Recording stopped. Total markers:', problemMarkers.length);
 
-      // Show export reminder modal
-      showExportTimelineReminder();
+      // Auto-save timeline if there are markers
+      if (problemMarkers.length > 0) {
+        const currentScript = scripts.find(s => s.id === currentScriptId);
+        if (currentScript) {
+          currentScript.markers = [...problemMarkers];
+          autoSaveTimelineToFile(currentScript);
+        }
+      }
     }
 
     function updateTimers() {
@@ -705,7 +697,6 @@
       const sessionTime = sessionStartTime ? Date.now() - sessionStartTime : 0;
 
       headerSessionTimer.textContent = formatTime(sessionTime);
-      inlineSessionTimer.textContent = formatTime(sessionTime);
     }
 
     function formatTime(ms) {
@@ -724,108 +715,78 @@
     }
 
     // ============================================
-    // MARKER TIMELINE UI
+    // RECORDING TIMELINE UI
     // ============================================
 
-    function updateMarkerTimeline() {
-      // Update stats
-      markerCount.textContent = `${problemMarkers.length} marker${problemMarkers.length !== 1 ? 's' : ''}`;
-      if (sessionStartTime) {
-        markerDuration.textContent = formatTime(Date.now() - sessionStartTime);
+    // Update recording pane timeline (simplified view)
+    function updateRecordingTimeline() {
+      // Update marker count
+      if (markerCountSmall) {
+        markerCountSmall.textContent = `${problemMarkers.length} marker${problemMarkers.length !== 1 ? 's' : ''}`;
       }
+
+      if (!recordingTimelineContent) return;
 
       // Sort markers by session time
       const sortedMarkers = [...problemMarkers].sort((a, b) => a.sessionTime - b.sessionTime);
 
       // Clear content
-      markerTimelineContent.innerHTML = '';
+      recordingTimelineContent.innerHTML = '';
 
       if (sortedMarkers.length === 0) {
-        // Show empty state
-        markerTimelineContent.innerHTML = `
-          <div class="marker-timeline-empty">
-            <svg viewBox="0 0 24 24" style="width: 48px; height: 48px; opacity: 0.3; margin-bottom: 12px;">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-            </svg>
-            <p>No markers yet</p>
-            <span>Click marker buttons below to add timestamps</span>
+        recordingTimelineContent.innerHTML = `
+          <div class="timeline-empty-state">
+            <span>Markers will appear here</span>
           </div>
         `;
         return;
       }
 
-      // Render markers
+      // Render markers (compact view)
       sortedMarkers.forEach(marker => {
         const item = document.createElement('div');
-        item.className = 'marker-timeline-item';
-        item.dataset.markerId = marker.id;
+        item.className = 'marker-item';
 
         const emoji = {
           'retake': '🔴',
           'stumble': '⚠️',
-          'note': '📝',
-          'playback-started': '▶️',
-          'playback-stopped': '⏸️'
+          'note': '📝'
         };
 
-        const typeClass = marker.type;
-        const typeName = marker.type.replace('-', ' ').toUpperCase();
-
-        let detailsHTML = '';
-        if (marker.slideNumber) {
-          detailsHTML = `<div class="marker-item-details">Slide ${marker.slideNumber}</div>`;
-        }
-        if (marker.note && marker.type !== 'slide-change') {
-          detailsHTML += `<div class="marker-item-note">${marker.note}</div>`;
-        }
-
         item.innerHTML = `
-          <div class="marker-item-header">
-            <span class="marker-item-icon">${emoji[marker.type] || '•'}</span>
-            <span class="marker-item-type ${typeClass}">${typeName}</span>
-            <span class="marker-item-time">${formatTime(marker.scriptTime)}</span>
-          </div>
-          ${detailsHTML}
-          <div class="marker-item-script">
-            <svg viewBox="0 0 24 24" style="width: 12px; height: 12px; fill: currentColor;">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>
-            </svg>
-            ${marker.scriptName}
-          </div>
+          <span class="marker-time">${formatTime(marker.scriptTime)}</span>
+          <span class="marker-type ${marker.type}">${marker.type}</span>
+          ${marker.note ? `<span class="marker-note">${marker.note}</span>` : ''}
         `;
 
-        markerTimelineContent.appendChild(item);
+        recordingTimelineContent.appendChild(item);
       });
+
+      // Scroll to bottom
+      recordingTimelineContent.scrollTop = recordingTimelineContent.scrollHeight;
     }
 
     // ============================================
-    // CONTROL PANEL / TIMELINE TOGGLE
+    // SETUP / RECORDING PANE TOGGLE
     // ============================================
 
-    function showTimeline() {
-      markerTimeline.classList.add('active');
-      // Hide control panel header (it has "Show Timeline" button - not needed when timeline is visible)
-      // The timeline has its own header with "Show Controls" button
-      controlPanelHeader.style.display = 'none';
-      document.querySelectorAll('.control-section').forEach(section => {
-        section.style.display = 'none';
-      });
-      document.querySelector('.keyboard-hints').style.display = 'none';
+    function showRecordingPane() {
+      setupPane.style.display = 'none';
+      recordingPane.style.display = 'flex';
     }
 
-    function showControls() {
-      markerTimeline.classList.remove('active');
-      // Show control panel header (it has "Show Timeline" button)
-      controlPanelHeader.style.display = 'flex';
-      document.querySelectorAll('.control-section').forEach(section => {
-        section.style.display = 'block';
-      });
-      document.querySelector('.keyboard-hints').style.display = 'block';
+    function showSetupPane() {
+      recordingPane.style.display = 'none';
+      setupPane.style.display = 'flex';
     }
 
     // Toggle buttons
-    showTimelineBtn.addEventListener('click', showTimeline);
-    showControlsBtn.addEventListener('click', showControls);
+    if (showSetupBtn) {
+      showSetupBtn.addEventListener('click', showSetupPane);
+    }
+    if (showRecordingToolsBtn) {
+      showRecordingToolsBtn.addEventListener('click', showRecordingPane);
+    }
 
     // ============================================
     // AUTO-SAVE SYSTEM
@@ -928,49 +889,6 @@
       modal.addEventListener('click', handleOverlayClick);
     }
 
-    function showExportTimelineReminder() {
-      const modal = document.getElementById('exportTimelineReminderModal');
-      const exportBtn = document.getElementById('exportReminderExportBtn');
-      const laterBtn = document.getElementById('exportReminderLaterBtn');
-      const markerCountEl = document.getElementById('exportReminderMarkerCount');
-      const durationEl = document.getElementById('exportReminderDuration');
-
-      // Calculate total session time
-      const totalSessionTime = sessionStartTime ? Date.now() - sessionStartTime : 0;
-
-      // Update summary
-      markerCountEl.textContent = `${problemMarkers.length} marker${problemMarkers.length !== 1 ? 's' : ''}`;
-      durationEl.textContent = formatTime(totalSessionTime);
-
-      modal.classList.add('visible');
-
-      const handleExport = () => {
-        modal.classList.remove('visible');
-        cleanup();
-        // Trigger the export guide button
-        document.getElementById('exportGuideBtn').click();
-      };
-
-      const handleLater = () => {
-        modal.classList.remove('visible');
-        cleanup();
-      };
-
-      const cleanup = () => {
-        exportBtn.removeEventListener('click', handleExport);
-        laterBtn.removeEventListener('click', handleLater);
-        modal.removeEventListener('click', handleOverlayClick);
-      };
-
-      const handleOverlayClick = (e) => {
-        if (e.target === modal) handleLater();
-      };
-
-      exportBtn.addEventListener('click', handleExport);
-      laterBtn.addEventListener('click', handleLater);
-      modal.addEventListener('click', handleOverlayClick);
-    }
-
     // ============================================
     // AUTO-SAVE TIMELINE TO FILE
     // ============================================
@@ -1035,47 +953,39 @@
 
         if (result.success) {
           console.log(`✅ Timeline auto-saved to: ${result.path}`);
-          showAutoSaveNotification(script.name);
+          showTimelineSavedToast(result.path);
         }
       } catch (error) {
         console.error('❌ Auto-save failed:', error);
       }
     }
 
-    function showAutoSaveNotification(scriptName) {
-      // Create a subtle notification that fades out
-      const notification = document.createElement('div');
-      notification.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        background: var(--success);
-        color: white;
-        padding: 12px 20px;
-        border-radius: var(--radius-md);
-        font-size: 12px;
-        font-weight: 600;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        z-index: 10000;
-        opacity: 0;
-        transition: opacity 0.3s ease;
-      `;
-      notification.textContent = `✓ Timeline auto-saved for "${scriptName}"`;
-      document.body.appendChild(notification);
+    // Timeline saved toast
+    let savedFilePath = null;
+    const timelineToast = document.getElementById('timelineToast');
+    const toastFileName = document.getElementById('toastFileName');
+    const toastOpenFolderBtn = document.getElementById('toastOpenFolderBtn');
+    const toastCloseBtn = document.getElementById('toastCloseBtn');
 
-      // Fade in
-      setTimeout(() => {
-        notification.style.opacity = '1';
-      }, 10);
-
-      // Fade out and remove after 3 seconds
-      setTimeout(() => {
-        notification.style.opacity = '0';
-        setTimeout(() => {
-          document.body.removeChild(notification);
-        }, 300);
-      }, 3000);
+    function showTimelineSavedToast(filePath) {
+      savedFilePath = filePath;
+      // Extract just the filename from the path
+      const fileName = filePath.split('/').pop();
+      toastFileName.textContent = fileName;
+      timelineToast.classList.add('visible');
     }
+
+    function hideTimelineSavedToast() {
+      timelineToast.classList.remove('visible');
+      savedFilePath = null;
+    }
+
+    toastCloseBtn.addEventListener('click', hideTimelineSavedToast);
+
+    toastOpenFolderBtn.addEventListener('click', async () => {
+      await ipcRenderer.invoke('open-timeline-folder');
+      hideTimelineSavedToast();
+    });
 
     // ============================================
     // EXPORT EDITING GUIDE
@@ -1577,7 +1487,7 @@
           mirrorCheckbox.checked = data.settings.mirror || false;
           flipCheckbox.checked = data.settings.flip || false;
           speedSlider.value = data.settings.speed || 30;
-          speedValue.textContent = speedSlider.value;
+          speedValueHeader.textContent = speedSlider.value;
           countdownCheckbox.checked = data.settings.countdownEnabled !== false;
           countdownSeconds.value = data.settings.countdownSeconds || 3;
         }
@@ -1724,7 +1634,7 @@
       }
       if (state.speed !== undefined) {
         speedSlider.value = state.speed;
-        speedValue.textContent = state.speed;
+        speedValueHeader.textContent = state.speed;
       }
     });
 
@@ -1746,33 +1656,33 @@
 
     // Speed control - don't include position to avoid jumping
     speedSlider.addEventListener('input', () => {
-      speedValue.textContent = speedSlider.value;
+      speedValueHeader.textContent = speedSlider.value;
       sendPlaybackState(false);
     });
 
-    const positionValue = document.getElementById('positionValue');
     const findTextInput = document.getElementById('findTextInput');
 
     // Position control - update display and send to teleprompter
     positionSlider.addEventListener('input', () => {
-      positionValue.textContent = positionSlider.value + '%';
+      if (positionValueHeader) positionValueHeader.textContent = positionSlider.value + '%';
       sendPlaybackState(true);
     });
 
     document.getElementById('jumpStartBtn').addEventListener('click', () => {
       positionSlider.value = 0;
-      positionValue.textContent = '0%';
+      if (positionValueHeader) positionValueHeader.textContent = '0%';
       sendPlaybackState(true);
     });
 
     document.getElementById('jumpEndBtn').addEventListener('click', () => {
       positionSlider.value = 100;
-      positionValue.textContent = '100%';
+      if (positionValueHeader) positionValueHeader.textContent = '100%';
       sendPlaybackState(true);
     });
 
     // Jump to cursor position in editor
-    document.getElementById('jumpCursorBtn').addEventListener('click', () => {
+    const jumpCursorBtn = document.getElementById('jumpCursorBtn');
+    if (jumpCursorBtn) jumpCursorBtn.addEventListener('click', () => {
       const cursorPos = scriptText.selectionStart;
       const totalChars = scriptText.value.length;
       if (totalChars > 0) {
@@ -1783,7 +1693,7 @@
         const percent = Math.min(100, Math.max(0, Math.round((linesBefore / totalLines) * 100)));
 
         positionSlider.value = percent;
-        positionValue.textContent = percent + '%';
+        if (positionValueHeader) positionValueHeader.textContent = percent + '%';
 
         // Also update monitor position
         targetPosition = percent;
@@ -1828,7 +1738,7 @@
 
         // Update position slider and teleprompter
         positionSlider.value = percent;
-        positionValue.textContent = percent + '%';
+        if (positionValueHeader) positionValueHeader.textContent = percent + '%';
 
         // Also update monitor position
         targetPosition = percent;
@@ -1985,7 +1895,7 @@
     // Handle position change from remote control
     ipcRenderer.on('remote-position', (event, position) => {
       positionSlider.value = position;
-      positionValue.textContent = Math.round(position) + '%';
+      if (positionValueHeader) positionValueHeader.textContent = Math.round(position) + '%';
       sendPlaybackState(true);
     });
 
@@ -2043,7 +1953,7 @@
         } else {
           speedSlider.value = Math.max(1, parseInt(speedSlider.value) - 5);
         }
-        speedValue.textContent = speedSlider.value;
+        speedValueHeader.textContent = speedSlider.value;
         // Only send speed update, not playback state change (to avoid interrupting countdown)
         ipcRenderer.send('speed-update', { speed: parseInt(speedSlider.value) });
         return;
@@ -2104,7 +2014,7 @@
       // Update display
       const displayPos = Math.min(100, Math.max(0, currentDisplayPosition));
       positionSlider.value = displayPos;
-      positionValue.textContent = Math.round(displayPos) + '%';
+      if (positionValueHeader) positionValueHeader.textContent = Math.round(displayPos) + '%';
       applyMonitorPosition(displayPos);
       monitorProgressBar.style.width = displayPos + '%';
       monitorPercent.textContent = Math.round(displayPos) + '%';
@@ -2403,4 +2313,99 @@
       confirmBtn.addEventListener('click', handleConfirm);
       cancelBtn.addEventListener('click', handleCancel);
       modal.addEventListener('click', handleOverlayClick);
+    }
+
+    // =======================================
+    // Timeline Storage Settings
+    // =======================================
+
+    const timelineFolderPath = document.getElementById('timelineFolderPath');
+    const chooseTimelineFolderBtn = document.getElementById('chooseTimelineFolderBtn');
+    const openTimelineFolderSettingsBtn = document.getElementById('openTimelineFolderSettingsBtn');
+    const openTimelineFolderBtn = document.getElementById('openTimelineFolderBtn');
+    const saveLocationPath = document.getElementById('saveLocationPath');
+    const saveLocationChangeBtn = document.getElementById('saveLocationChangeBtn');
+
+    // Helper to shorten path for display
+    function shortenPath(folder) {
+      return folder.replace(/^\/Users\/[^\/]+/, '~');
+    }
+
+    // Update all path displays
+    function updateAllPathDisplays(folder) {
+      const shortPath = shortenPath(folder);
+      if (timelineFolderPath) {
+        timelineFolderPath.textContent = shortPath;
+        timelineFolderPath.title = folder;
+      }
+      if (saveLocationPath) {
+        saveLocationPath.textContent = shortPath;
+        saveLocationPath.title = folder;
+      }
+    }
+
+    // Load and display current timeline folder on startup
+    (async function loadTimelineFolder() {
+      try {
+        const folder = await ipcRenderer.invoke('get-timeline-folder');
+        if (folder) {
+          updateAllPathDisplays(folder);
+        }
+      } catch (err) {
+        console.error('Failed to load timeline folder:', err);
+      }
+    })();
+
+    // Choose folder (shared function)
+    async function chooseTimelineFolder() {
+      const result = await ipcRenderer.invoke('choose-timeline-folder');
+      if (result.success && result.folder) {
+        updateAllPathDisplays(result.folder);
+      }
+    }
+
+    // Choose folder button (in settings tab)
+    if (chooseTimelineFolderBtn) {
+      chooseTimelineFolderBtn.addEventListener('click', chooseTimelineFolder);
+    }
+
+    // Change button (in save location bar)
+    if (saveLocationChangeBtn) {
+      saveLocationChangeBtn.addEventListener('click', chooseTimelineFolder);
+    }
+
+    // Open folder button (in settings)
+    if (openTimelineFolderSettingsBtn) {
+      openTimelineFolderSettingsBtn.addEventListener('click', async () => {
+        await ipcRenderer.invoke('open-timeline-folder');
+      });
+    }
+
+    // Open folder from timeline panel (Recording pane header)
+    if (openTimelineFolderBtn) {
+      openTimelineFolderBtn.addEventListener('click', async () => {
+        await ipcRenderer.invoke('open-timeline-folder');
+      });
+    }
+
+    // Open folder from Setup pane footer
+    const openTimelineFolderSetupBtn = document.getElementById('openTimelineFolderSetupBtn');
+    if (openTimelineFolderSetupBtn) {
+      openTimelineFolderSetupBtn.addEventListener('click', async () => {
+        await ipcRenderer.invoke('open-timeline-folder');
+      });
+    }
+
+    // Click on folder path to open it (settings tab)
+    if (timelineFolderPath) {
+      timelineFolderPath.addEventListener('click', async () => {
+        await ipcRenderer.invoke('open-timeline-folder');
+      });
+    }
+
+    // Click on folder path to open it (save location bar)
+    if (saveLocationPath) {
+      saveLocationPath.addEventListener('click', async () => {
+        await ipcRenderer.invoke('open-timeline-folder');
+      });
     }

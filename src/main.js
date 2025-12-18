@@ -1010,6 +1010,116 @@ ipcMain.handle('get-timeline-history-path', async () => {
   return path.join(app.getPath('userData'), 'timeline-history');
 });
 
+// User preferences storage
+const prefsPath = () => path.join(app.getPath('userData'), 'preferences.json');
+
+function loadPreferences() {
+  try {
+    if (fs.existsSync(prefsPath())) {
+      return JSON.parse(fs.readFileSync(prefsPath(), 'utf-8'));
+    }
+  } catch (e) {
+    console.error('Failed to load preferences:', e);
+  }
+  return {};
+}
+
+function savePreferences(prefs) {
+  try {
+    fs.writeFileSync(prefsPath(), JSON.stringify(prefs, null, 2));
+  } catch (e) {
+    console.error('Failed to save preferences:', e);
+  }
+}
+
+// Get user-friendly timeline folder path (user-configurable, defaults to Documents)
+function getTimelineSaveFolder() {
+  const prefs = loadPreferences();
+  if (prefs.timelineSaveFolder && fs.existsSync(prefs.timelineSaveFolder)) {
+    return prefs.timelineSaveFolder;
+  }
+  return path.join(app.getPath('documents'), 'Umbrellaprompter Timelines');
+}
+
+// Ensure the timeline folder exists
+function ensureTimelineFolder() {
+  const folder = getTimelineSaveFolder();
+  if (!fs.existsSync(folder)) {
+    fs.mkdirSync(folder, { recursive: true });
+  }
+  return folder;
+}
+
+// Choose timeline save folder
+ipcMain.handle('choose-timeline-folder', async () => {
+  const result = await dialog.showOpenDialog(operatorWindow, {
+    properties: ['openDirectory', 'createDirectory'],
+    title: 'Choose Timeline Save Location',
+    defaultPath: getTimelineSaveFolder()
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return { success: false };
+  }
+
+  const folder = result.filePaths[0];
+  const prefs = loadPreferences();
+  prefs.timelineSaveFolder = folder;
+  savePreferences(prefs);
+
+  console.log('📁 Timeline save folder set to:', folder);
+  return { success: true, folder };
+});
+
+// Auto-save timeline to user-accessible Documents folder
+ipcMain.handle('autosave-timeline', async (event, { content, fileName, scriptId }) => {
+  try {
+    const baseFolder = ensureTimelineFolder();
+
+    // Create date-based subfolder for organization (e.g., "2025-12-18")
+    const date = new Date();
+    const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+    const dateFolder = path.join(baseFolder, dateStr);
+
+    // Ensure date folder exists
+    if (!fs.existsSync(dateFolder)) {
+      fs.mkdirSync(dateFolder, { recursive: true });
+    }
+
+    // Create filename with time only (date is in folder name)
+    const timeStr = date.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS
+    const safeName = fileName.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const fullFileName = `${safeName}_${timeStr}.txt`;
+    const filepath = path.join(dateFolder, fullFileName);
+
+    fs.writeFileSync(filepath, content);
+
+    console.log('📁 Timeline saved to:', filepath);
+    return { success: true, path: filepath, folder: dateFolder };
+  } catch (error) {
+    console.error('Timeline autosave error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Open timeline folder in Finder/Explorer
+ipcMain.handle('open-timeline-folder', async () => {
+  try {
+    const folder = ensureTimelineFolder();
+    const { shell } = require('electron');
+    await shell.openPath(folder);
+    return { success: true, folder };
+  } catch (error) {
+    console.error('Failed to open timeline folder:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get timeline folder path
+ipcMain.handle('get-timeline-folder', async () => {
+  return getTimelineSaveFolder();
+});
+
 // Load project
 ipcMain.handle('load-project', async () => {
   const result = await dialog.showOpenDialog(operatorWindow, {

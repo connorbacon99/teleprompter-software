@@ -190,252 +190,198 @@
     </div>
 
     <aside class="control-panel">
-      <!-- Control Panel Header with Toggle -->
-      <div class="control-panel-header" id="controlPanelHeader" style="display: none;">
-        <h2>Controls</h2>
-        <button class="btn btn-sm" id="showTimelineBtn">
-          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-          Show Timeline
-        </button>
-      </div>
+      <!-- ========== SETUP PANE ========== -->
+      <div class="pane setup-pane" id="setupPane">
 
-      <!-- Display -->
-      <div class="control-section">
-        <div class="section-header">
-          <svg viewBox="0 0 24 24"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg>
-          <h3>Display Output</h3>
-        </div>
-        <div class="select-wrapper" style="display: flex; gap: 6px;">
-          <select id="displaySelect" style="flex: 1;">
-            <option value="">Select display...</option>
-          </select>
-          <button class="btn" id="refreshDisplaysBtn" title="Refresh displays" style="padding: 8px 10px;">
-            <svg viewBox="0 0 24 24" style="width: 14px; height: 14px;"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+        <!-- Display Pane Header -->
+        <div class="pane-header">
+          <h3>Display</h3>
+          <button class="pane-nav-btn" id="showRecordingToolsBtn">
+            <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>
+            <span>Recording</span>
+            <svg class="nav-arrow" viewBox="0 0 24 24"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg>
           </button>
         </div>
-        <div class="button-row">
-          <button class="btn success" id="openDisplayBtn">Open Display</button>
-          <button class="btn" id="closeDisplayBtn">Close</button>
-        </div>
-      </div>
 
-      <!-- Playback -->
-      <div class="control-section">
-        <div class="section-header">
-          <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-          <h3>Playback</h3>
-        </div>
-
-        <div class="toggle-row">
-          <label for="countdownCheckbox">Countdown before start</label>
-          <label class="toggle">
-            <input type="checkbox" id="countdownCheckbox" checked>
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-        <div class="countdown-row" id="countdownRow">
-          <label>Seconds:</label>
-          <input type="number" id="countdownSeconds" value="3" min="1" max="10">
-        </div>
-
-        <div class="slider-group" style="margin-top: 12px;">
-          <div class="slider-label">
-            <span>Speed</span>
-            <span class="slider-value" id="speedValue">30</span>
+        <!-- Display Section -->
+        <div class="setup-section">
+          <div class="setup-section-label">Select Display</div>
+          <div class="setup-row">
+            <select class="setup-select" id="displaySelect">
+              <option value="">Select display...</option>
+            </select>
+            <button class="setup-icon-btn" id="refreshDisplaysBtn" title="Refresh displays">
+              <svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+            </button>
           </div>
-          <input type="range" id="speedSlider" min="1" max="100" value="30">
+          <div class="setup-btn-row">
+            <button class="setup-btn primary" id="openDisplayBtn">Open Display</button>
+            <button class="setup-btn" id="closeDisplayBtn">Close</button>
+          </div>
+        </div>
+
+        <!-- Appearance Section -->
+        <div class="setup-section">
+          <div class="setup-section-label">Appearance</div>
+
+          <div class="setup-option-row">
+            <span class="setup-option-label">Font</span>
+            <select class="setup-select-sm" id="fontFamilySelect">
+              <option value="Arial">Arial</option>
+              <option value="Helvetica">Helvetica</option>
+              <option value="Georgia">Georgia</option>
+              <option value="Times New Roman">Times</option>
+              <option value="Verdana">Verdana</option>
+              <option value="Courier New">Courier</option>
+            </select>
+          </div>
+
+          <div class="setup-slider-row">
+            <span class="setup-option-label">Size</span>
+            <input type="range" class="setup-slider" id="fontSizeInput" min="24" max="200" value="72">
+            <span class="setup-slider-value" id="fontSizeValue">72</span>
+          </div>
+
+          <div class="setup-option-row">
+            <span class="setup-option-label">Text Color</span>
+            <input type="color" class="setup-color" id="textColorInput" value="#ffffff">
+          </div>
+
+          <div class="setup-option-row">
+            <span class="setup-option-label">Background</span>
+            <input type="color" class="setup-color" id="bgColorInput" value="#000000">
+          </div>
+
+          <div class="setup-toggle-row">
+            <span class="setup-option-label">Mirror</span>
+            <label class="setup-toggle">
+              <input type="checkbox" id="mirrorCheckbox">
+              <span class="setup-toggle-track"></span>
+            </label>
+          </div>
+
+          <div class="setup-toggle-row">
+            <span class="setup-option-label">Flip</span>
+            <label class="setup-toggle">
+              <input type="checkbox" id="flipCheckbox">
+              <span class="setup-toggle-track"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Playback Section -->
+        <div class="setup-section">
+          <div class="setup-section-label">Playback</div>
+          <div class="setup-toggle-row">
+            <span class="setup-option-label">Countdown</span>
+            <label class="setup-toggle">
+              <input type="checkbox" id="countdownCheckbox" checked>
+              <span class="setup-toggle-track"></span>
+            </label>
+          </div>
+          <div class="setup-option-row" id="countdownRow">
+            <span class="setup-option-label">Seconds</span>
+            <input type="number" class="setup-number" id="countdownSeconds" value="3" min="1" max="10">
+          </div>
+        </div>
+
+        <!-- Remote Control Section -->
+        <div class="setup-section">
+          <div class="setup-section-label">Remote Control</div>
+          <div class="setup-status-row">
+            <div class="setup-status-dot" id="remoteStatusDot"></div>
+            <span class="setup-status-text" id="remoteStatusText">Off</span>
+          </div>
+          <div class="setup-btn-row">
+            <button class="setup-btn primary" id="startRemoteBtn">Start</button>
+            <button class="setup-btn" id="stopRemoteBtn">Stop</button>
+          </div>
+          <div class="setup-remote-info" id="remoteUrlBox" style="display: none;">
+            <img id="remoteQrCode" alt="QR Code" class="setup-qr">
+            <div class="setup-remote-url" id="remoteUrl"></div>
+          </div>
+        </div>
+
+        <!-- Keyboard Shortcuts -->
+        <div class="setup-section">
+          <div class="setup-section-label">Shortcuts</div>
+          <div class="setup-shortcut"><span>Play/Pause</span><kbd>Space</kbd></div>
+          <div class="setup-shortcut"><span>Speed</span><kbd>↑</kbd><kbd>↓</kbd></div>
+          <div class="setup-shortcut"><span>Jump</span><kbd>Home</kbd><kbd>End</kbd></div>
+        </div>
+
+        <!-- Footer -->
+        <div class="setup-footer">
+          <div class="setup-folder-row">
+            <button class="setup-footer-btn" id="openTimelineFolderSetupBtn">
+              <svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+              Open Timelines Folder
+            </button>
+            <button class="setup-change-link" id="saveLocationChangeBtn">Change</button>
+          </div>
         </div>
 
       </div>
 
-      <!-- Recording Section (shown when recording) -->
-      <div class="control-section recording-section" id="recordingSection" style="display: none;">
-        <div class="section-header">
-          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="currentColor"/></svg>
+      <!-- ========== RECORDING PANE ========== -->
+      <div class="pane recording-pane" id="recordingPane" style="display: none;">
+
+        <!-- Recording Pane Header -->
+        <div class="pane-header">
+          <button class="pane-nav-btn back" id="showSetupBtn" title="Back to Display">
+            <svg class="nav-arrow" viewBox="0 0 24 24"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z"/></svg>
+          </button>
           <h3>Recording</h3>
-          <div class="recording-timer-inline" id="recordingTimerInline">
-            <div class="recording-dot-inline"></div>
-            <span id="inlineSessionTimer">00:00:00</span>
-          </div>
-        </div>
-        <div class="marker-buttons-inline">
-          <button class="marker-btn-inline retake" id="inlineMarkerRetake">
-            <span>🔴</span> Retake
-          </button>
-          <button class="marker-btn-inline stumble" id="inlineMarkerStumble">
-            <span>⚠️</span> Stumble
-          </button>
-          <button class="marker-btn-inline note" id="inlineMarkerNote">
-            <span>📝</span> Note
+          <button class="pane-icon-btn" id="openTimelineFolderBtn" title="Open saved timelines">
+            <svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
           </button>
         </div>
-      </div>
 
-      <!-- Position -->
-      <div class="control-section">
-        <div class="section-header">
-          <svg viewBox="0 0 24 24"><path d="M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z"/></svg>
-          <h3>Position</h3>
-        </div>
-        <div class="slider-group">
-          <div class="slider-label">
-            <span>Scroll Position</span>
-            <span class="slider-value" id="positionValue">0%</span>
+        <!-- Speed Slider -->
+        <div class="rec-slider-section">
+          <div class="rec-slider-header">
+            <span class="rec-slider-label">Speed</span>
+            <span class="rec-slider-value" id="speedValueHeader">30</span>
           </div>
-          <input type="range" id="positionSlider" min="0" max="100" value="0">
+          <input type="range" class="rec-slider" id="speedSlider" min="1" max="100" value="30">
         </div>
-        <div class="position-actions">
-          <button class="btn" id="jumpStartBtn">Start</button>
-          <button class="btn" id="jumpCursorBtn" title="Jump to cursor position in editor">Cursor</button>
-          <button class="btn" id="jumpEndBtn">End</button>
-        </div>
-        <!-- Find in script -->
-        <div style="margin-top: 10px;">
-          <div style="display: flex; gap: 6px;">
-            <input type="text" id="findTextInput" placeholder="Find text..." style="flex: 1; padding: 6px 8px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-primary); font-size: 12px;">
-            <button class="btn" id="findTextBtn" style="padding: 6px 10px;">Find</button>
+
+        <!-- Position Slider -->
+        <div class="rec-slider-section">
+          <div class="rec-slider-header">
+            <span class="rec-slider-label">Position</span>
+            <span class="rec-slider-value" id="positionValueHeader">0%</span>
           </div>
-        </div>
-      </div>
-
-      <!-- Appearance & Remote Tabs -->
-      <div class="control-section">
-        <div class="section-header">
-          <svg viewBox="0 0 24 24"><path d="M12 2l-5.5 9h11z"/><circle cx="17.5" cy="17.5" r="4.5"/><path d="M3 13.5h8v8H3z"/></svg>
-          <select id="settingsTabSelect" class="settings-tab-select">
-            <option value="appearance">Appearance</option>
-            <option value="remote">Remote Control</option>
-          </select>
-        </div>
-
-        <!-- Appearance Tab -->
-        <div class="tab-content active" id="tab-appearance">
-          <div class="style-grid">
-            <div class="style-row">
-              <label>Font</label>
-              <div class="select-wrapper" style="margin: 0; width: 100px;">
-                <select id="fontFamilySelect" style="padding: 6px 8px;">
-                  <option value="Arial">Arial</option>
-                  <option value="Helvetica">Helvetica</option>
-                  <option value="Georgia">Georgia</option>
-                  <option value="Times New Roman">Times</option>
-                  <option value="Verdana">Verdana</option>
-                  <option value="Courier New">Courier</option>
-                </select>
-              </div>
-            </div>
-            <div class="slider-group" style="margin-top: 8px;">
-              <div class="slider-label">
-                <span>Font Size</span>
-                <span class="slider-value" id="fontSizeValue">72</span>
-              </div>
-              <input type="range" id="fontSizeInput" min="24" max="200" value="72">
-            </div>
-            <div class="style-row">
-              <label>Text Color</label>
-              <div class="color-input-wrapper">
-                <input type="color" id="textColorInput" value="#ffffff">
-              </div>
-            </div>
-            <div class="style-row">
-              <label>Background</label>
-              <div class="color-input-wrapper">
-                <input type="color" id="bgColorInput" value="#000000">
-              </div>
-            </div>
-            <div class="toggle-row">
-              <label for="mirrorCheckbox">Mirror (Horizontal)</label>
-              <label class="toggle">
-                <input type="checkbox" id="mirrorCheckbox">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <div class="toggle-row">
-              <label for="flipCheckbox">Flip (Vertical)</label>
-              <label class="toggle">
-                <input type="checkbox" id="flipCheckbox">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
+          <input type="range" class="rec-slider" id="positionSlider" min="0" max="100" value="0">
+          <div class="rec-position-btns">
+            <button class="rec-pos-btn" id="jumpStartBtn">Start</button>
+            <button class="rec-pos-btn" id="jumpEndBtn">End</button>
+            <input type="text" class="rec-find-input" id="findTextInput" placeholder="Find text...">
+            <button class="rec-pos-btn" id="findTextBtn">Find</button>
           </div>
         </div>
 
-        <!-- Remote Tab -->
-        <div class="tab-content" id="tab-remote">
-          <div class="remote-status">
-            <div class="status-dot" id="remoteStatusDot"></div>
-            <span id="remoteStatusText">Remote control off</span>
-          </div>
-          <div class="button-row">
-            <button class="btn success" id="startRemoteBtn">Start Server</button>
-            <button class="btn" id="stopRemoteBtn">Stop</button>
-          </div>
-          <div class="remote-url" id="remoteUrlBox" style="display: none;">
-            <div class="qr-container">
-              <img id="remoteQrCode" alt="QR Code" style="width: 150px; height: 150px; border-radius: 8px; background: white; padding: 8px;">
-            </div>
-            <div class="remote-url-label">Scan QR code or open URL:</div>
-            <div class="remote-url-text" id="remoteUrl"></div>
+        <!-- Marker Buttons -->
+        <div class="rec-markers-section">
+          <div class="rec-section-label">Markers</div>
+          <div class="rec-marker-btns">
+            <button class="rec-marker-btn retake" id="recordingMarkerRetake">🔴 Retake</button>
+            <button class="rec-marker-btn stumble" id="recordingMarkerStumble">⚠️ Stumble</button>
+            <button class="rec-marker-btn note" id="recordingMarkerNote">📝 Note</button>
           </div>
         </div>
-      </div>
 
-      <!-- Keyboard shortcuts -->
-      <div class="keyboard-hints">
-        <h4>Keyboard Shortcuts</h4>
-        <div class="hint-row">
-          <span>Play / Pause</span>
-          <kbd class="kbd">Space</kbd>
+        <!-- Timeline -->
+        <div class="rec-timeline">
+          <div class="rec-timeline-header">
+            <span>Timeline</span>
+            <span class="rec-timeline-count" id="markerCountSmall">0</span>
+          </div>
+          <div class="rec-timeline-content" id="recordingTimelineContent">
+            <div class="rec-timeline-empty">No markers yet</div>
+          </div>
         </div>
-        <div class="hint-row">
-          <span>Speed +/-</span>
-          <kbd class="kbd">↑</kbd> <kbd class="kbd">↓</kbd>
-        </div>
-        <div class="hint-row">
-          <span>Jump Start/End</span>
-          <kbd class="kbd">Home</kbd> <kbd class="kbd">End</kbd>
-        </div>
-        <div class="hint-row">
-          <span>Close Display</span>
-          <kbd class="kbd">Esc</kbd>
-        </div>
-      </div>
 
-      <!-- Marker Timeline Panel - Phase 2 Feature -->
-      <div class="marker-timeline" id="markerTimeline">
-        <div class="marker-timeline-header">
-          <h3>Recording Timeline</h3>
-          <button class="btn btn-sm" id="showControlsBtn">
-            <svg viewBox="0 0 24 24"><path d="M12.14 2.17a10 10 0 0 0-9.96 9.96c0 5.52 4.48 10 10 10 5.52 0 10-4.48 10-10 0-5.52-4.48-10-10-10h-.04zm.02 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/><path d="M11 7h2v6h-2zm0 8h2v2h-2z"/></svg>
-            Show Controls
-          </button>
-        </div>
-        <div class="marker-timeline-content" id="markerTimelineContent">
-          <div class="marker-timeline-empty">
-            <svg viewBox="0 0 24 24" style="width: 48px; height: 48px; opacity: 0.3; margin-bottom: 12px;">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-            </svg>
-            <p>No markers yet</p>
-            <span>Click marker buttons below to add timestamps</span>
-          </div>
-        </div>
-        <div class="marker-timeline-buttons" id="timelineMarkerButtons">
-          <button class="marker-btn-timeline retake" id="timelineMarkerRetake" disabled>
-            <span>🔴</span> Retake
-          </button>
-          <button class="marker-btn-timeline stumble" id="timelineMarkerStumble" disabled>
-            <span>⚠️</span> Stumble
-          </button>
-          <button class="marker-btn-timeline note" id="timelineMarkerNote" disabled>
-            <span>📝</span> Note
-          </button>
-        </div>
-        <div class="marker-timeline-footer">
-          <div class="marker-stats">
-            <span id="markerCount">0 markers</span>
-            <span id="markerDuration">00:00:00</span>
-          </div>
-        </div>
       </div>
 
     </aside>
@@ -524,7 +470,7 @@
       </p>
       <div style="background: var(--accent-subtle); border-left: 3px solid var(--accent); padding: 12px; border-radius: 4px; margin-bottom: 16px;">
         <p style="color: var(--text-primary); font-size: 12px; margin: 0; font-weight: 600;">
-          💡 Tip: Export your timeline before stopping to save your markers for video editing.
+          💡 Your timeline will be saved automatically to your Timelines folder.
         </p>
       </div>
       <div class="modal-buttons">
@@ -534,32 +480,27 @@
     </div>
   </div>
 
-  <!-- Export Timeline Reminder Modal -->
-  <div class="modal-overlay" id="exportTimelineReminderModal">
-    <div class="modal">
-      <h3>Recording Stopped</h3>
-      <p style="color: var(--text-secondary); font-size: 13px; margin: 12px 0;">
-        Your recording session has ended. Would you like to export the timeline with your markers?
-      </p>
-      <div style="background: var(--bg-tertiary); padding: 12px; border-radius: 6px; margin: 16px 0;">
-        <p style="color: var(--text-tertiary); font-size: 11px; margin: 0;">
-          <strong style="color: var(--text-secondary);">Recording Summary:</strong><br>
-          <span id="exportReminderMarkerCount">0 markers</span> •
-          <span id="exportReminderDuration">00:00:00</span>
-        </p>
-      </div>
-      <div class="modal-buttons">
-        <button class="btn" id="exportReminderLaterBtn">Maybe Later</button>
-        <button class="btn primary" id="exportReminderExportBtn">Export Timeline</button>
-      </div>
-    </div>
-  </div>
 
   <!-- Auto-save Indicator - Phase 1 Feature -->
   <div class="autosave-indicator" id="autosaveIndicator">
     <div class="autosave-spinner" id="autosaveSpinner"></div>
     <span id="autosaveText">Auto-saving...</span>
     <span class="autosave-checkmark" id="autosaveCheckmark" style="display: none;">✓</span>
+  </div>
+
+  <!-- Timeline Saved Toast -->
+  <div class="timeline-toast" id="timelineToast">
+    <div class="timeline-toast-icon">
+      <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+    </div>
+    <div class="timeline-toast-content">
+      <div class="timeline-toast-title">Timeline Saved</div>
+      <div class="timeline-toast-file" id="toastFileName">filename.txt</div>
+    </div>
+    <button class="timeline-toast-btn" id="toastOpenFolderBtn">Open Folder</button>
+    <button class="timeline-toast-close" id="toastCloseBtn">
+      <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+    </button>
   </div>
 
   <script src="js/operator.js"></script>
