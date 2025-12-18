@@ -2227,9 +2227,27 @@
 
     // Handle button clicks
     updateActionBtn.addEventListener('click', async () => {
+      console.log('🔘 Update button clicked, state:', updateState);
       if (updateState === 'available') {
-        await ipcRenderer.invoke('download-update');
+        // Immediately show downloading state
+        updateState = 'downloading';
+        updateActionBtn.textContent = 'Downloading...';
+        updateActionBtn.disabled = true;
+        updateText.innerHTML = 'Starting download...';
+
+        console.log('   Requesting download...');
+        const result = await ipcRenderer.invoke('download-update');
+        console.log('   Download request result:', result);
+
+        if (result && result.error) {
+          // Reset on error
+          updateState = 'available';
+          updateActionBtn.textContent = 'Download';
+          updateActionBtn.disabled = false;
+          updateText.innerHTML = 'Download failed: ' + result.error;
+        }
       } else if (updateState === 'downloaded') {
+        console.log('   Installing update...');
         await ipcRenderer.invoke('install-update');
       }
     });

@@ -1082,11 +1082,18 @@ ipcMain.handle('check-for-updates', async () => {
 });
 
 ipcMain.handle('download-update', async () => {
-  if (!autoUpdater) return { error: 'Auto-updater not available' };
+  console.log('⬇️ Download update requested');
+  if (!autoUpdater) {
+    console.log('   Error: Auto-updater not available');
+    return { error: 'Auto-updater not available' };
+  }
   try {
+    console.log('   Starting download...');
     await autoUpdater.downloadUpdate();
+    console.log('   Download started successfully');
     return { success: true };
   } catch (err) {
+    console.log('   Download error:', err.message);
     return { error: err.message };
   }
 });
@@ -1156,6 +1163,7 @@ app.whenReady().then(async () => {
     });
 
     autoUpdater.on('download-progress', (progress) => {
+      console.log('📥 Download progress:', Math.round(progress.percent) + '%');
       if (operatorWindow) {
         operatorWindow.webContents.send('update-status', {
           status: 'downloading',
@@ -1165,6 +1173,7 @@ app.whenReady().then(async () => {
     });
 
     autoUpdater.on('update-downloaded', (info) => {
+      console.log('✅ Update downloaded:', info.version);
       if (operatorWindow) {
         operatorWindow.webContents.send('update-status', {
           status: 'downloaded',
