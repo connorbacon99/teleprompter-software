@@ -944,7 +944,7 @@
 
       // Save to file via IPC
       try {
-        const fileName = `${script.name.replace(/[^a-zA-Z0-9]/g, '_')}_timeline_${sessionId}`;
+        const fileName = script.name.replace(/[^a-zA-Z0-9]/g, '_');
         const result = await ipcRenderer.invoke('autosave-timeline', {
           content: output,
           fileName: fileName,
