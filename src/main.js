@@ -95,7 +95,7 @@ function createOperatorWindow() {
   operatorWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    title: 'Umbrellaprompter - Operator',
+    title: 'Flowstate - Operator',
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -320,7 +320,7 @@ function getRemoteControlHTML() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>Umbrellaprompter Remote</title>
+  <title>Flowstate Remote</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; touch-action: manipulation; }
     body {
@@ -1055,7 +1055,7 @@ function getTimelineSaveFolder() {
   if (prefs.timelineSaveFolder && fs.existsSync(prefs.timelineSaveFolder)) {
     return prefs.timelineSaveFolder;
   }
-  return path.join(app.getPath('documents'), 'Umbrellaprompter Timelines');
+  return path.join(app.getPath('documents'), 'Flowstate Timelines');
 }
 
 // Ensure the timeline folder exists

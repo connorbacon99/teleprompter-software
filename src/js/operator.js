@@ -1,5 +1,5 @@
 /**
- * Umbrellaprompter - Operator Window JavaScript
+ * Flowstate - Operator Window JavaScript
  * Sections: State, Monitor, Script, Playback, Settings, Mobile, Updates
  */
 

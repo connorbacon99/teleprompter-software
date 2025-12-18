@@ -1,5 +1,5 @@
 {
-  "name": "umbrellaprompter",
+  "name": "flowstate",
   "version": "1.3.3",
   "description": "Professional teleprompter software for studio use",
   "main": "src/main.js",
@@ -26,8 +26,8 @@
     "qrcode": "^1.5.4"
   },
   "build": {
-    "appId": "com.umbrellaprompter.app",
-    "productName": "Umbrellaprompter",
+    "appId": "com.flowstate.app",
+    "productName": "Flowstate",
     "icon": "assets/icon.png",
     "publish": {
       "provider": "github",
