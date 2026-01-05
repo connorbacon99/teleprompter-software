@@ -146,6 +146,7 @@ function createTeleprompterWindow(displayId) {
     height: height,
     fullscreen: true,
     frame: false,
+    alwaysOnTop: true,  // Keep teleprompter visible even when other apps are focused
     title: 'Teleprompter Display',
     webPreferences: {
       nodeIntegration: true,
@@ -670,8 +671,10 @@ ipcMain.handle('is-teleprompter-open', () => {
 
 // Open teleprompter on specific display
 ipcMain.handle('open-teleprompter', (event, displayId) => {
+  // If teleprompter is already open, just focus it and return current display
   if (teleprompterWindow) {
-    teleprompterWindow.close();
+    teleprompterWindow.focus();
+    return displayId;
   }
   return createTeleprompterWindow(displayId);
 });
