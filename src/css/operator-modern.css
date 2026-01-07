@@ -3919,6 +3919,8 @@ button:focus-visible {
     0 4px 20px rgba(0, 0, 0, 0.5);
   animation: numberPulse 1s ease-in-out infinite;
   letter-spacing: -8px;
+  /* Optical adjustment - nudge down to visually center within ring */
+  transform: translateY(12px);
 }
 
 .recording-countdown-number.recording {

@@ -2305,6 +2305,21 @@
     document.addEventListener('keydown', (e) => {
       console.log('🎹 Keydown:', e.code, 'Target:', e.target.tagName, 'ID:', e.target.id);
 
+      // Escape key cancels recording countdown (works even in inputs/modals)
+      if (e.code === 'Escape' && recordingCountdownInterval) {
+        console.log('   ✅ Escape - cancelling recording countdown');
+        e.preventDefault();
+        cancelRecordingCountdown();
+        return;
+      }
+
+      // Skip ALL shortcuts during recording countdown (except escape above)
+      if (recordingCountdownInterval) {
+        console.log('   Skipping shortcuts - recording countdown active');
+        e.preventDefault();
+        return;
+      }
+
       // Skip ALL keyboard shortcuts when typing in any input field or modal
       const isInInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
       const isInModal = e.target.closest('.modal') || e.target.closest('.modal-overlay');
