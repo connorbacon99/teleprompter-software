@@ -2085,6 +2085,13 @@
     // Initialize countdown row visibility
     countdownRow.style.display = countdownCheckbox.checked ? 'flex' : 'none';
 
+    // Toggle recording countdown seconds visibility based on checkbox
+    recordingCountdownCheckbox.addEventListener('change', () => {
+      recordingCountdownRow.style.display = recordingCountdownCheckbox.checked ? 'flex' : 'none';
+    });
+    // Initialize recording countdown row visibility
+    recordingCountdownRow.style.display = recordingCountdownCheckbox.checked ? 'flex' : 'none';
+
     // Script text change
     scriptText.addEventListener('input', () => {
       clearTimeout(scriptText.sendTimeout);
