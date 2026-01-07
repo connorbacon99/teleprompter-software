@@ -1253,6 +1253,11 @@ ipcMain.handle('get-app-version', () => {
   return app.getVersion();
 });
 
+ipcMain.handle('open-releases-page', () => {
+  const { shell } = require('electron');
+  shell.openExternal('https://github.com/connorbacon99/teleprompter-software/releases');
+});
+
 app.whenReady().then(async () => {
   // Set up permission handler for microphone access
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {

@@ -2477,17 +2477,16 @@
           updateState = 'available';
           updateVersion.textContent = `(v${data.version})`;
           updateText.innerHTML = `Update available <span>${updateVersion.textContent}</span>`;
-          updateActionBtn.textContent = 'Download';
+          updateActionBtn.textContent = 'Get Update';
           showUpdateBanner();
           break;
 
         case 'downloading':
-          updateState = 'downloading';
-          const percent = Math.round(data.percent);
-          updateText.innerHTML = `Downloading update... <span>${percent}%</span>`;
-          updateActionBtn.textContent = 'Downloading...';
-          updateActionBtn.disabled = true;
-          showUpdateBanner(); // Ensure banner stays visible during download
+          // Manual download - open releases page
+          updateState = 'available';
+          updateText.innerHTML = `Opening download page...`;
+          updateActionBtn.textContent = 'Get Update';
+          updateActionBtn.disabled = false;
           break;
 
         case 'downloaded':
@@ -2495,17 +2494,22 @@
           updateText.innerHTML = `Update ready <span>(v${data.version})</span>`;
           updateActionBtn.textContent = 'Restart Now';
           updateActionBtn.disabled = false;
-          showUpdateBanner(); // Ensure banner is visible
+          showUpdateBanner();
           console.log('✅ Update downloaded and ready to install');
           break;
 
         case 'error':
           console.log('❌ Update error:', data.message);
+          // Code signing error - offer manual download
           updateState = 'available';
-          updateActionBtn.textContent = 'Retry Download';
+          updateActionBtn.textContent = 'Get Update';
           updateActionBtn.disabled = false;
-          updateText.innerHTML = `Error: ${data.message}`;
-          // Don't hide banner - show the error
+          if (data.message.includes('signature') || data.message.includes('Code signature')) {
+            updateText.innerHTML = `Update available - click to download manually`;
+          } else {
+            updateText.innerHTML = `Update available - click to download`;
+          }
+          showUpdateBanner();
           break;
 
         case 'not-available':
@@ -2523,23 +2527,15 @@
     updateActionBtn.addEventListener('click', async () => {
       console.log('🔘 Update button clicked, state:', updateState);
       if (updateState === 'available') {
-        // Immediately show downloading state
-        updateState = 'downloading';
-        updateActionBtn.textContent = 'Downloading...';
-        updateActionBtn.disabled = true;
-        updateText.innerHTML = 'Starting download...';
+        // Open GitHub releases page for manual download
+        console.log('   Opening releases page...');
+        updateText.innerHTML = 'Opening download page...';
+        await ipcRenderer.invoke('open-releases-page');
 
-        console.log('   Requesting download...');
-        const result = await ipcRenderer.invoke('download-update');
-        console.log('   Download request result:', result);
-
-        if (result && result.error) {
-          // Reset on error
-          updateState = 'available';
-          updateActionBtn.textContent = 'Download';
-          updateActionBtn.disabled = false;
-          updateText.innerHTML = 'Download failed: ' + result.error;
-        }
+        // Reset after a moment
+        setTimeout(() => {
+          updateText.innerHTML = `Update available <span>${updateVersion.textContent}</span>`;
+        }, 2000);
       } else if (updateState === 'downloaded') {
         console.log('   Installing update...');
         updateActionBtn.textContent = 'Restarting...';
