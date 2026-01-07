@@ -644,35 +644,7 @@
     // ============================================
 
     function startRecording() {
-      if (isRecording) {
-        console.log('Recording already active');
-        return;
-      }
-
-      console.log('🔴 Starting recording session...');
-      isRecording = true;
-      sessionStartTime = Date.now();
-      scriptStartTime = Date.now();
-
-      // Update button UI
-      toggleRecordingBtn.innerHTML = `
-        <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12"/></svg>
-        Stop Recording
-      `;
-      toggleRecordingBtn.classList.remove('success');
-      toggleRecordingBtn.classList.add('danger');
-
-      // Show recording pane
-      headerRecordingTimer.style.display = 'flex';
-      showRecordingPane();
-
-      console.log('Recording UI elements shown');
-
-      // Start timer
-      timerInterval = setInterval(updateTimers, 1000);
-      updateTimers();
-      updateRecordingTimeline();
-      console.log('Recording started - Session ID:', sessionId);
+      startRecordingWithCountdown();
     }
 
     function stopRecording() {
