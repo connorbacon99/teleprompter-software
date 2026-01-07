@@ -1692,7 +1692,9 @@
           flip: flipCheckbox.checked,
           speed: parseInt(speedSlider.value),
           countdownEnabled: countdownCheckbox.checked,
-          countdownSeconds: parseInt(countdownSeconds.value)
+          countdownSeconds: parseInt(countdownSeconds.value),
+          recordingCountdownEnabled: recordingCountdownCheckbox.checked,
+          recordingCountdownSeconds: parseInt(recordingCountdownSeconds.value)
         }
       };
 
@@ -1732,6 +1734,9 @@
           speedValueHeader.textContent = speedSlider.value;
           countdownCheckbox.checked = data.settings.countdownEnabled !== false;
           countdownSeconds.value = data.settings.countdownSeconds || 3;
+          recordingCountdownCheckbox.checked = data.settings.recordingCountdownEnabled !== false;
+          recordingCountdownSeconds.value = data.settings.recordingCountdownSeconds || 5;
+          recordingCountdownRow.style.display = recordingCountdownCheckbox.checked ? 'flex' : 'none';
         }
 
         updateCharCount();
