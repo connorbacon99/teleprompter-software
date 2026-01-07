@@ -22,6 +22,13 @@
     const countdownCheckbox = document.getElementById('countdownCheckbox');
     const countdownSeconds = document.getElementById('countdownSeconds');
     const countdownRow = document.getElementById('countdownRow');
+    const recordingCountdownCheckbox = document.getElementById('recordingCountdownCheckbox');
+    const recordingCountdownSeconds = document.getElementById('recordingCountdownSeconds');
+    const recordingCountdownRow = document.getElementById('recordingCountdownRow');
+    const recordingCountdownOverlay = document.getElementById('recordingCountdownOverlay');
+    const recordingCountdownNumber = document.getElementById('recordingCountdownNumber');
+    const recordingCountdownText = document.getElementById('recordingCountdownText');
+    const noRecordingModal = document.getElementById('noRecordingModal');
 
     // Helper to set textarea value while preserving undo stack
     function setTextWithUndo(textarea, newValue) {
@@ -105,6 +112,7 @@
     let sessionStartTime = null;
     let scriptStartTime = null;
     let timerInterval = null;
+    let recordingCountdownInterval = null;
 
     // Problem markers
     let problemMarkers = [];
