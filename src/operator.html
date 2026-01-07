@@ -509,6 +509,23 @@
     </div>
   </div>
 
+  <!-- No Recording Warning Modal -->
+  <div class="modal-overlay" id="noRecordingModal">
+    <div class="modal">
+      <h3>No Active Recording</h3>
+      <p style="color: var(--text-secondary); font-size: 13px; margin: 12px 0 16px 0;">
+        You're about to start the teleprompter without recording. Timestamps won't be tracked.
+      </p>
+      <div class="modal-buttons" style="flex-direction: column; gap: 8px;">
+        <button class="btn success" id="noRecordingStartRecordingBtn" style="width: 100%;">Start Recording First</button>
+        <div style="display: flex; gap: 8px; width: 100%;">
+          <button class="btn" id="noRecordingCancelBtn" style="flex: 1;">Cancel</button>
+          <button class="btn primary" id="noRecordingContinueBtn" style="flex: 1;">Continue Anyway</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 
   <!-- Auto-save Indicator - Phase 1 Feature -->
   <div class="autosave-indicator" id="autosaveIndicator">
