@@ -2305,17 +2305,26 @@
     document.addEventListener('keydown', (e) => {
       console.log('🎹 Keydown:', e.code, 'Target:', e.target.tagName, 'ID:', e.target.id);
 
+      // Skip ALL keyboard shortcuts when typing in any input field or modal
+      const isInInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
+      const isInModal = e.target.closest('.modal') || e.target.closest('.modal-overlay');
+      const isContentEditable = e.target.isContentEditable;
+
+      if (isInInput || isInModal || isContentEditable) {
+        console.log('   Skipping shortcuts - in input/modal/contentEditable');
+        return;
+      }
+
       // For spacebar, check if monitor view is active - if so, always trigger play/pause
-      // (unless actively typing in find input, a modal input, or editing in monitor)
+      // (unless actively typing in find input or editing in monitor)
       if (e.code === 'Space') {
         const monitorActive = monitorView.classList.contains('active');
         const isInFindInput = e.target.id === 'findTextInput';
-        const isInModalInput = e.target.closest('.modal-content');
 
-        console.log('   Space pressed - Monitor active:', monitorActive, 'Find input:', isInFindInput, 'Modal:', !!isInModalInput, 'isMonitorEditing:', isMonitorEditing);
+        console.log('   Space pressed - Monitor active:', monitorActive, 'Find input:', isInFindInput, 'isMonitorEditing:', isMonitorEditing);
 
         // Allow spacebar for play/pause if monitor is active and not in specific inputs or editing
-        if (monitorActive && !isInFindInput && !isInModalInput && !isMonitorEditing) {
+        if (monitorActive && !isInFindInput && !isMonitorEditing) {
           console.log('   ✅ Space key - triggering play/pause (monitor view active)');
           e.preventDefault();
           headerPlayPauseBtn.click();
@@ -2323,13 +2332,8 @@
         }
       }
 
-      // Arrow keys for speed - ALWAYS work (except in textareas/contentEditable where vertical nav matters)
+      // Arrow keys for speed adjustment
       if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
-        // Skip only for textarea and contentEditable
-        if (e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
-          return;
-        }
-
         e.preventDefault();
         if (e.code === 'ArrowUp') {
           speedSlider.value = Math.min(100, parseInt(speedSlider.value) + 5);
@@ -2337,29 +2341,11 @@
           speedSlider.value = Math.max(1, parseInt(speedSlider.value) - 5);
         }
         speedValueHeader.textContent = speedSlider.value;
-        // Only send speed update, not playback state change (to avoid interrupting countdown)
         ipcRenderer.send('speed-update', { speed: parseInt(speedSlider.value) });
         return;
       }
 
-      // Skip other shortcuts when typing in any input field
-      if (e.target === scriptText) {
-        console.log('   Skipping - scriptText focused');
-        return;
-      }
-      if (e.target.isContentEditable) {
-        console.log('   Skipping - contentEditable focused');
-        return;
-      }
-      if (e.target.tagName === 'INPUT') {
-        console.log('   Skipping - INPUT focused');
-        return;
-      }
-      if (e.target.tagName === 'TEXTAREA') {
-        console.log('   Skipping - TEXTAREA focused');
-        return;
-      }
-
+      // Other shortcuts (already filtered for inputs/modals above)
       if (e.code === 'Space') {
         console.log('   ✅ Space key - triggering play/pause');
         e.preventDefault();

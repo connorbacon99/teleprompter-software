@@ -1,6 +1,6 @@
 {
   "name": "flowstate",
-  "version": "1.3.5",
+  "version": "1.3.6",
   "description": "Professional teleprompter software for studio use",
   "main": "src/main.js",
   "scripts": {
@@ -35,7 +35,10 @@
       "repo": "teleprompter-software"
     },
     "mac": {
-      "category": "public.app-category.productivity"
+      "category": "public.app-category.productivity",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
     },
     "win": {
       "target": "nsis"
