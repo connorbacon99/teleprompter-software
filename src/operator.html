@@ -511,16 +511,30 @@
 
   <!-- No Recording Warning Modal -->
   <div class="modal-overlay" id="noRecordingModal">
-    <div class="modal">
+    <div class="modal recording-warning-modal">
+      <div class="modal-icon-header">
+        <div class="modal-warning-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <circle cx="12" cy="16" r="1" fill="currentColor" stroke="none"/>
+          </svg>
+        </div>
+      </div>
       <h3>No Active Recording</h3>
-      <p style="color: var(--text-secondary); font-size: 13px; margin: 12px 0 16px 0;">
+      <p class="modal-description">
         You're about to start the teleprompter without recording. Timestamps won't be tracked.
       </p>
-      <div class="modal-buttons" style="flex-direction: column; gap: 8px;">
-        <button class="btn success" id="noRecordingStartRecordingBtn" style="width: 100%;">Start Recording First</button>
-        <div style="display: flex; gap: 8px; width: 100%;">
-          <button class="btn" id="noRecordingCancelBtn" style="flex: 1;">Cancel</button>
-          <button class="btn primary" id="noRecordingContinueBtn" style="flex: 1;">Continue Anyway</button>
+      <div class="modal-buttons-stack">
+        <button class="btn modal-btn-primary-action" id="noRecordingStartRecordingBtn">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+            <circle cx="12" cy="12" r="6"/>
+          </svg>
+          Start Recording First
+        </button>
+        <div class="modal-btn-row">
+          <button class="btn modal-btn-secondary" id="noRecordingCancelBtn">Cancel</button>
+          <button class="btn modal-btn-tertiary" id="noRecordingContinueBtn">Continue Anyway</button>
         </div>
       </div>
     </div>
@@ -536,8 +550,12 @@
 
   <!-- Recording Countdown Overlay -->
   <div class="recording-countdown-overlay" id="recordingCountdownOverlay">
-    <div class="recording-countdown-number" id="recordingCountdownNumber">5</div>
-    <div class="recording-countdown-text" id="recordingCountdownText">Recording starts in...</div>
+    <div class="recording-countdown-ring"></div>
+    <div class="recording-countdown-content">
+      <div class="recording-countdown-number" id="recordingCountdownNumber">5</div>
+      <div class="recording-countdown-text" id="recordingCountdownText">Recording starts in...</div>
+    </div>
+    <div class="recording-countdown-pulse"></div>
   </div>
 
   <!-- Timeline Saved Toast -->

@@ -683,10 +683,15 @@
     // Recording countdown functions
     function runRecordingCountdown(seconds, callback) {
       let count = seconds;
+      const ringEl = recordingCountdownOverlay.querySelector('.recording-countdown-ring');
+      const pulseEl = recordingCountdownOverlay.querySelector('.recording-countdown-pulse');
+
       recordingCountdownNumber.textContent = count;
       recordingCountdownNumber.className = 'recording-countdown-number';
       recordingCountdownText.textContent = 'Recording starts in...';
       recordingCountdownText.className = 'recording-countdown-text';
+      if (ringEl) ringEl.classList.remove('recording');
+      if (pulseEl) pulseEl.classList.remove('recording');
       recordingCountdownOverlay.classList.add('visible');
 
       recordingCountdownInterval = setInterval(() => {
@@ -698,6 +703,8 @@
           recordingCountdownNumber.className = 'recording-countdown-number recording';
           recordingCountdownText.textContent = 'RECORDING';
           recordingCountdownText.className = 'recording-countdown-text recording';
+          if (ringEl) ringEl.classList.add('recording');
+          if (pulseEl) pulseEl.classList.add('recording');
         } else {
           clearInterval(recordingCountdownInterval);
           recordingCountdownInterval = null;
