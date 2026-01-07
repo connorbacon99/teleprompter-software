@@ -708,6 +708,84 @@
       }
     }
 
+    // Recording countdown functions
+    function runRecordingCountdown(seconds, callback) {
+      let count = seconds;
+      recordingCountdownNumber.textContent = count;
+      recordingCountdownNumber.className = 'recording-countdown-number';
+      recordingCountdownText.textContent = 'Recording starts in...';
+      recordingCountdownText.className = 'recording-countdown-text';
+      recordingCountdownOverlay.classList.add('visible');
+
+      recordingCountdownInterval = setInterval(() => {
+        count--;
+        if (count > 0) {
+          recordingCountdownNumber.textContent = count;
+        } else if (count === 0) {
+          recordingCountdownNumber.textContent = 'REC';
+          recordingCountdownNumber.className = 'recording-countdown-number recording';
+          recordingCountdownText.textContent = 'RECORDING';
+          recordingCountdownText.className = 'recording-countdown-text recording';
+        } else {
+          clearInterval(recordingCountdownInterval);
+          recordingCountdownInterval = null;
+          recordingCountdownOverlay.classList.remove('visible');
+          if (callback) callback();
+        }
+      }, 1000);
+    }
+
+    function cancelRecordingCountdown() {
+      if (recordingCountdownInterval) {
+        clearInterval(recordingCountdownInterval);
+        recordingCountdownInterval = null;
+      }
+      recordingCountdownOverlay.classList.remove('visible');
+    }
+
+    function startRecordingWithCountdown() {
+      if (isRecording) {
+        console.log('Recording already active');
+        return;
+      }
+
+      if (recordingCountdownCheckbox.checked) {
+        const seconds = parseInt(recordingCountdownSeconds.value);
+        runRecordingCountdown(seconds, () => {
+          actuallyStartRecording();
+        });
+      } else {
+        actuallyStartRecording();
+      }
+    }
+
+    function actuallyStartRecording() {
+      console.log('🔴 Starting recording session...');
+      isRecording = true;
+      sessionStartTime = Date.now();
+      scriptStartTime = Date.now();
+
+      // Update button UI
+      toggleRecordingBtn.innerHTML = `
+        <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12"/></svg>
+        Stop Recording
+      `;
+      toggleRecordingBtn.classList.remove('success');
+      toggleRecordingBtn.classList.add('danger');
+
+      // Show recording pane
+      headerRecordingTimer.style.display = 'flex';
+      showRecordingPane();
+
+      console.log('Recording UI elements shown');
+
+      // Start timer
+      timerInterval = setInterval(updateTimers, 1000);
+      updateTimers();
+      updateRecordingTimeline();
+      console.log('Recording started - Session ID:', sessionId);
+    }
+
     function updateTimers() {
       if (!isRecording) return;
 
