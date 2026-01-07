@@ -923,6 +923,21 @@
       }
     });
 
+    // No Recording Warning Modal handlers
+    document.getElementById('noRecordingCancelBtn').addEventListener('click', () => {
+      noRecordingModal.classList.remove('visible');
+    });
+
+    document.getElementById('noRecordingContinueBtn').addEventListener('click', async () => {
+      noRecordingModal.classList.remove('visible');
+      await handlePlayToggle();
+    });
+
+    document.getElementById('noRecordingStartRecordingBtn').addEventListener('click', () => {
+      noRecordingModal.classList.remove('visible');
+      startRecordingWithCountdown();
+    });
+
     function showStopRecordingConfirmation() {
       const modal = document.getElementById('stopRecordingModal');
       const confirmBtn = document.getElementById('stopRecordingConfirmBtn');
