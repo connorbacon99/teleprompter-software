@@ -1781,6 +1781,16 @@
         countdownEnabled: countdownCheckbox.checked
       });
 
+      // If not recording and trying to start playback, show warning
+      if (!isPlaying && !isRecording) {
+        noRecordingModal.classList.add('visible');
+        return;
+      }
+
+      await handlePlayToggle();
+    });
+
+    async function handlePlayToggle() {
       // When starting playback, auto-switch to monitor view and open display
       if (!isPlaying) {
         console.log('📺 Opening monitor view and display');
@@ -1814,11 +1824,11 @@
         runMonitorCountdown(seconds);
         isPlaying = true;
         updatePlayButton();
-        // Start recording session automatically
-        startRecording();
-        // Add automatic "Playback Started" marker immediately when countdown starts
-        console.log('🎬 Adding auto playback started marker (countdown starting)');
-        addProblemMarker('playback-started', '▶️ Playback Started');
+        // Add automatic "Playback Started" marker if recording
+        if (isRecording) {
+          console.log('🎬 Adding auto playback started marker (countdown starting)');
+          addProblemMarker('playback-started', '▶️ Playback Started');
+        }
       } else {
         console.log('🔄 Toggling play state. Was playing:', isPlaying);
         isPlaying = !isPlaying;
@@ -1833,21 +1843,18 @@
           // Send pause without position - teleprompter stops where it is
           sendPlaybackState(false);
         } else {
-          console.log('▶️ Started playing - adding marker');
-          // Start recording when playback starts
-          if (!isRecording) {
-            console.log('📹 Starting recording first');
-            startRecording();
+          console.log('▶️ Started playing');
+          // Add automatic "Playback Started" marker if recording
+          if (isRecording) {
+            console.log('🎬 Adding auto playback started marker');
+            addProblemMarker('playback-started', '▶️ Playback Started');
           }
-          // Add automatic "Playback Started" marker for video editing
-          console.log('🎬 Adding auto playback started marker');
-          addProblemMarker('playback-started', '▶️ Playback Started');
           // Include position when starting so playback continues from current spot
           sendPlaybackState(true);
         }
         updatePlayButton();
       }
-    });
+    }
 
     // Listen for countdown complete
     ipcRenderer.on('countdown-complete', () => {
