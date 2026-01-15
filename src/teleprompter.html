@@ -38,6 +38,9 @@
       will-change: transform;
       transform: translate3d(0, 0, 0);
       backface-visibility: hidden;
+      /* Additional performance hints */
+      contain: layout style;
+      -webkit-font-smoothing: antialiased;
     }
 
     .script-text {
@@ -293,7 +296,17 @@
 
       calculateScrollHeight();
       let frameCount = 0;
-      lastFrameTime = performance.now();
+      let isFirstFrame = true;
+
+      // Cache values that don't change during scrolling
+      const containerHeight = container.clientHeight;
+      const startY = containerHeight * 0.5;
+      let endY = -scriptWrapper.scrollHeight + (containerHeight * 0.5);
+      let range = startY - endY;
+
+      // Use a fixed time step for ultra-smooth scrolling
+      const FIXED_TIMESTEP = 16.667; // ~60fps baseline
+      let accumulator = 0;
 
       function scrollFrame(currentTime) {
         if (!isPlaying) {
@@ -301,41 +314,66 @@
           return;
         }
 
-        // Calculate delta time for consistent speed regardless of frame rate
-        const deltaTime = currentTime - lastFrameTime;
-        lastFrameTime = currentTime;
-
-        // Skip if delta is too large (e.g., tab was inactive)
-        if (deltaTime > 100) {
+        // On first frame, just initialize timing - don't move yet
+        if (isFirstFrame) {
+          lastFrameTime = currentTime;
+          isFirstFrame = false;
           scrollAnimationId = requestAnimationFrame(scrollFrame);
           return;
         }
 
-        const containerHeight = container.clientHeight;
-        const startY = containerHeight * 0.5;
-        const endY = -scriptWrapper.scrollHeight + (containerHeight * 0.5);
+        const deltaTime = currentTime - lastFrameTime;
+        lastFrameTime = currentTime;
 
-        // Calculate pixels per millisecond based on speed (normalized to ~60fps baseline)
-        // At speed 50: ~2.5 pixels per frame at 60fps = ~0.15 px/ms
-        const pixelsPerMs = ((scrollSpeed / 100) * 4 + 0.5) / 16.67;
-        const pixelsThisFrame = pixelsPerMs * deltaTime;
+        // Skip if delta is abnormal (tab inactive or timing glitch)
+        if (deltaTime > 50 || deltaTime < 1) {
+          scrollAnimationId = requestAnimationFrame(scrollFrame);
+          return;
+        }
 
-        currentPosition -= pixelsThisFrame;
+        // Calculate pixels per fixed timestep based on speed
+        const pixelsPerStep = ((scrollSpeed / 100) * 4 + 0.5);
 
-        if (currentPosition < endY) {
+        // Accumulate time and advance in fixed steps for consistency
+        accumulator += deltaTime;
+
+        // Process accumulated time in fixed steps (cap to prevent spiral)
+        const maxSteps = 3;
+        let steps = 0;
+        while (accumulator >= FIXED_TIMESTEP && steps < maxSteps) {
+          currentPosition -= pixelsPerStep;
+          accumulator -= FIXED_TIMESTEP;
+          steps++;
+        }
+        // Clamp accumulator to prevent buildup
+        if (accumulator > FIXED_TIMESTEP * 2) {
+          accumulator = 0;
+        }
+
+        // Interpolate for sub-frame smoothness
+        const interpolation = accumulator / FIXED_TIMESTEP;
+        const renderPosition = currentPosition - (pixelsPerStep * interpolation);
+
+        // Recalculate end position occasionally (in case window resized)
+        frameCount++;
+        if (frameCount % 60 === 0) {
+          endY = -scriptWrapper.scrollHeight + (containerHeight * 0.5);
+          range = startY - endY;
+        }
+
+        if (renderPosition < endY) {
           currentPosition = endY;
           isPlaying = false;
           showStatus('END');
           scrollAnimationId = null;
+          scriptWrapper.style.transform = `translate3d(0, ${endY}px, 0)`;
           return;
         }
 
-        scriptWrapper.style.transform = `translate3d(0, ${currentPosition}px, 0)`;
+        scriptWrapper.style.transform = `translate3d(0, ${renderPosition}px, 0)`;
 
-        // Send position update to operator every 5 frames (~12 times per second)
-        frameCount++;
-        if (frameCount % 5 === 0) {
-          const range = startY - endY;
+        // Send position update to operator every 4 frames (~15 times per second)
+        if (frameCount % 4 === 0) {
           const percent = ((startY - currentPosition) / range) * 100;
           ipcRenderer.send('position-update', {
             percent: Math.min(100, Math.max(0, percent)),
@@ -470,7 +508,12 @@
 
       scrollSpeed = state.speed;
 
-      if (state.position !== undefined) {
+      // Check if this is a resume (going from paused to playing)
+      const isResuming = !isPlaying && state.isPlaying;
+
+      // Only apply position if NOT resuming - when resuming, continue from current position
+      // This prevents the "jump" when starting playback
+      if (state.position !== undefined && !isResuming) {
         updatePosition(state.position);
       }
 
@@ -484,6 +527,8 @@
             cancelAnimationFrame(scrollAnimationId);
             scrollAnimationId = null;
           }
+          // Send final position update so operator stays in sync
+          sendCurrentPosition();
         }
 
         showStatus(isPlaying ? 'PLAYING' : 'PAUSED');
@@ -493,6 +538,21 @@
         }
       }
     });
+
+    // Send current position to operator (used when pausing to ensure sync)
+    function sendCurrentPosition() {
+      const containerHeight = container.clientHeight;
+      const startY = containerHeight * 0.5;
+      const endY = -scriptWrapper.scrollHeight + (containerHeight * 0.5);
+      const range = startY - endY;
+      const percent = range > 0 ? ((startY - currentPosition) / range) * 100 : 0;
+      ipcRenderer.send('position-update', {
+        percent: Math.min(100, Math.max(0, percent)),
+        transform: currentPosition,
+        containerHeight: containerHeight,
+        scrollHeight: scriptWrapper.scrollHeight
+      });
+    }
 
     // Receive speed-only updates (doesn't affect playback state - safe during countdown)
     ipcRenderer.on('speed-only-update', (event, data) => {

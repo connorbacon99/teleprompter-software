@@ -1536,22 +1536,43 @@
     }
 
     // Receive position updates from teleprompter
+    // Uses smooth interpolation to prevent jumpy preview
     ipcRenderer.on('monitor-position', (event, positionData) => {
       const percent = positionData.percent || 0;
 
-      // Sync position
+      // Only update target - let animation loop handle smooth transition
       targetPosition = percent;
-      currentDisplayPosition = percent;
 
-      updateMonitorPosition(positionData);
-      positionSlider.value = percent;
-      if (document.getElementById('positionValue')) {
-        document.getElementById('positionValue').textContent = Math.round(percent) + '%';
-      }
-      if (positionValueHeader) {
-        positionValueHeader.textContent = Math.round(percent) + '%';
+      // Start smooth animation if not already running
+      if (!monitorSmoothAnimationId) {
+        monitorSmoothAnimationId = requestAnimationFrame(smoothMonitorUpdate);
       }
     });
+
+    // Smooth animation loop for monitor preview
+    let monitorSmoothAnimationId = null;
+
+    function smoothMonitorUpdate() {
+      const diff = targetPosition - currentDisplayPosition;
+
+      if (Math.abs(diff) < 0.01) {
+        // Close enough, snap to target
+        currentDisplayPosition = targetPosition;
+        monitorSmoothAnimationId = null;
+      } else {
+        // Smooth interpolation - 0.12 gives nice balance between responsive and smooth
+        currentDisplayPosition += diff * 0.12;
+        monitorSmoothAnimationId = requestAnimationFrame(smoothMonitorUpdate);
+      }
+
+      // Update all displays with smoothed position
+      const displayPos = Math.min(100, Math.max(0, currentDisplayPosition));
+      applyMonitorPosition(displayPos);
+      positionSlider.value = displayPos;
+      if (positionValueHeader) positionValueHeader.textContent = Math.round(displayPos) + '%';
+      monitorProgressBar.style.width = displayPos + '%';
+      monitorPercent.textContent = Math.round(displayPos) + '%';
+    }
 
     // Initialize monitor when teleprompter opens
     ipcRenderer.on('teleprompter-opened', (event, dimensions) => {
@@ -1568,6 +1589,29 @@
       if (persistentHighlightStart !== null && persistentHighlightEnd !== null) {
         syncHighlightToTeleprompter();
       }
+    });
+
+    // Handle teleprompter window closing - reset state to match reality
+    ipcRenderer.on('teleprompter-closed', () => {
+      console.log('📺 Teleprompter window closed - resetting state');
+
+      // Reset playback state since teleprompter is gone
+      if (isPlaying) {
+        isPlaying = false;
+        updatePlayButton();
+
+        // Add marker if recording
+        if (isRecording) {
+          addProblemMarker('playback-stopped', '⏸️ Playback Stopped (display closed)');
+        }
+      }
+
+      // Cancel any running countdowns
+      cancelMonitorCountdown();
+
+      // Update monitor status to show teleprompter is closed
+      monitorStatusDot.classList.remove('playing');
+      monitorStatusText.textContent = 'Display Closed';
     });
 
     // Handle window resize
@@ -1856,6 +1900,8 @@
           console.log('🎬 Adding auto playback started marker (countdown starting)');
           addProblemMarker('playback-started', '▶️ Playback Started');
         }
+        // Blur any focused element so arrow keys work for speed control
+        document.activeElement.blur();
       } else {
         console.log('🔄 Toggling play state. Was playing:', isPlaying);
         isPlaying = !isPlaying;
@@ -1878,6 +1924,8 @@
           }
           // Include position when starting so playback continues from current spot
           sendPlaybackState(true);
+          // Blur any focused element so arrow keys work for speed control
+          document.activeElement.blur();
         }
         updatePlayButton();
       }
@@ -2303,7 +2351,7 @@
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
-      console.log('🎹 Keydown:', e.code, 'Target:', e.target.tagName, 'ID:', e.target.id);
+      console.log('🎹 Keydown:', e.code, 'Target:', e.target.tagName, 'ID:', e.target.id, 'Type:', e.target.type);
 
       // Escape key cancels recording countdown (works even in inputs/modals)
       if (e.code === 'Escape' && recordingCountdownInterval) {
@@ -2320,31 +2368,54 @@
         return;
       }
 
-      // Skip ALL keyboard shortcuts when typing in any input field or modal
-      const isInInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
+      // Determine what kind of element has focus
       const isInModal = e.target.closest('.modal') || e.target.closest('.modal-overlay');
       const isContentEditable = e.target.isContentEditable;
+      const isTextarea = e.target.tagName === 'TEXTAREA';
 
-      if (isInInput || isInModal || isContentEditable) {
-        console.log('   Skipping shortcuts - in input/modal/contentEditable');
+      // Text-type inputs where spacebar should type a space
+      const textInputTypes = ['text', 'search', 'email', 'password', 'url', 'tel'];
+      const isTextInput = e.target.tagName === 'INPUT' && textInputTypes.includes(e.target.type);
+
+      // Non-text inputs (checkboxes, range sliders, number) - spacebar should NOT type
+      const isNonTextInput = e.target.tagName === 'INPUT' && !textInputTypes.includes(e.target.type);
+
+      // For text inputs, textareas, modals, and contentEditable - let spacebar work normally
+      if (e.code === 'Space' && (isTextInput || isTextarea || isInModal || isContentEditable)) {
+        console.log('   Allowing spacebar for typing in text field');
+        return; // Let browser handle normally (type a space)
+      }
+
+      // For non-text inputs (checkboxes, sliders, number inputs) - intercept spacebar
+      if (e.code === 'Space' && isNonTextInput) {
+        console.log('   ✅ Space on non-text input - triggering play/pause instead');
+        e.preventDefault();
+        e.target.blur(); // Remove focus from the control
+        headerPlayPauseBtn.click();
         return;
       }
 
-      // For spacebar, check if monitor view is active - if so, always trigger play/pause
-      // (unless actively typing in find input or editing in monitor)
+      // Skip other shortcuts when in any input/modal (but spacebar was handled above)
+      if (isTextInput || isTextarea || isInModal || isContentEditable || isNonTextInput) {
+        console.log('   Skipping non-space shortcuts - in input/modal/contentEditable');
+        return;
+      }
+
+      // For spacebar in monitor view - always trigger play/pause
+      // (unless actively editing in monitor)
       if (e.code === 'Space') {
         const monitorActive = monitorView.classList.contains('active');
-        const isInFindInput = e.target.id === 'findTextInput';
+        console.log('   Space pressed - Monitor active:', monitorActive, 'isMonitorEditing:', isMonitorEditing);
 
-        console.log('   Space pressed - Monitor active:', monitorActive, 'Find input:', isInFindInput, 'isMonitorEditing:', isMonitorEditing);
-
-        // Allow spacebar for play/pause if monitor is active and not in specific inputs or editing
-        if (monitorActive && !isInFindInput && !isMonitorEditing) {
-          console.log('   ✅ Space key - triggering play/pause (monitor view active)');
-          e.preventDefault();
-          headerPlayPauseBtn.click();
+        if (isMonitorEditing) {
+          console.log('   Skipping - monitor editing mode active');
           return;
         }
+
+        console.log('   ✅ Space key - triggering play/pause');
+        e.preventDefault();
+        headerPlayPauseBtn.click();
+        return;
       }
 
       // Arrow keys for speed adjustment
@@ -2360,12 +2431,8 @@
         return;
       }
 
-      // Other shortcuts (already filtered for inputs/modals above)
-      if (e.code === 'Space') {
-        console.log('   ✅ Space key - triggering play/pause');
-        e.preventDefault();
-        headerPlayPauseBtn.click();
-      } else if (e.code === 'Home') {
+      // Other shortcuts
+      if (e.code === 'Home') {
         e.preventDefault();
         document.getElementById('jumpStartBtn').click();
       } else if (e.code === 'End') {
