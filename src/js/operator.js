@@ -22,9 +22,7 @@
     const countdownCheckbox = document.getElementById('countdownCheckbox');
     const countdownSeconds = document.getElementById('countdownSeconds');
     const countdownRow = document.getElementById('countdownRow');
-    const recordingCountdownCheckbox = document.getElementById('recordingCountdownCheckbox');
     const recordingCountdownSeconds = document.getElementById('recordingCountdownSeconds');
-    const recordingCountdownRow = document.getElementById('recordingCountdownRow');
     const recordingCountdownOverlay = document.getElementById('recordingCountdownOverlay');
     const recordingCountdownNumber = document.getElementById('recordingCountdownNumber');
     const recordingCountdownText = document.getElementById('recordingCountdownText');
@@ -100,6 +98,7 @@
     const recordingMarkerNote = document.getElementById('recordingMarkerNote');
     const recordingTimelineContent = document.getElementById('recordingTimelineContent');
     const markerCountSmall = document.getElementById('markerCountSmall');
+    const timelineFilenamePreview = document.getElementById('timelineFilenamePreview');
 
     // Multi-script session state
     let scripts = [];
@@ -282,6 +281,8 @@
           updateScriptTabs();
           if (scriptId === currentScriptId) {
             fileName.textContent = script.name;
+            // Update timeline filename preview with new name
+            updateTimelineFilenamePreview();
           }
           console.log('Script renamed to:', script.name);
         }
@@ -413,11 +414,88 @@
         return;
       }
 
+      // For stumble type, auto-capture context from script
+      if (type === 'stumble' && !autoNote) {
+        console.log('⚠️ Auto-capturing stumble context');
+        const context = getStumbleContext();
+        createMarker('stumble', context ? `Near: "${context}"` : 'Stumble', null);
+        return;
+      }
+
       console.log('✅ Creating marker with autoNote:', autoNote);
 
       // For other types (playback-started, playback-stopped), create marker immediately
       // If autoNote is provided (for automatic markers), use it
       createMarker(type, autoNote || '', null);
+    }
+
+    // Get approximate script context for stumble markers
+    function getStumbleContext() {
+      const scriptContent = scriptText.value;
+      if (!scriptContent) return null;
+
+      const totalLength = scriptContent.length;
+      if (totalLength === 0) return null;
+
+      // targetPosition is the scroll position (top of viewport)
+      // The text being READ is at the CENTER of the teleprompter viewport
+      // Add offset to move from top-of-viewport to center-of-viewport
+      // Roughly 8% of the script represents half the visible viewport
+      const viewportCenterOffset = 8;
+      const centerPosition = Math.min(100, targetPosition + viewportCenterOffset);
+
+      // Get current position as character index (from center of viewport)
+      const currentCharIndex = Math.floor((centerPosition / 100) * totalLength);
+
+      // Apply minimal reaction offset - stumble happened almost instantly
+      const scrollSpeed = parseInt(speedSlider.value) || 30;
+      const charsPerSecond = (scrollSpeed / 30) * 3; // Rough estimate
+      const reactionOffset = Math.floor(charsPerSecond * 0.2); // 0.2 second - near instant
+      const adjustedIndex = Math.max(0, currentCharIndex - reactionOffset);
+
+      // Extract surrounding words (about 5-7 words centered on the stumble point)
+      const wordsAroundIndex = extractWordsAroundIndex(scriptContent, adjustedIndex, 6);
+
+      console.log('⚠️ Stumble context:', {
+        topPosition: targetPosition + '%',
+        centerPosition: centerPosition + '%',
+        charIndex: currentCharIndex,
+        adjustedIndex,
+        context: wordsAroundIndex
+      });
+
+      return wordsAroundIndex;
+    }
+
+    // Extract words around a character index
+    function extractWordsAroundIndex(text, charIndex, wordCount) {
+      // Split into words while preserving positions
+      const words = text.split(/\s+/).filter(w => w.length > 0);
+      if (words.length === 0) return null;
+
+      // Find which word contains the character index
+      let currentPos = 0;
+      let targetWordIndex = 0;
+
+      for (let i = 0; i < words.length; i++) {
+        const wordStart = text.indexOf(words[i], currentPos);
+        const wordEnd = wordStart + words[i].length;
+
+        if (charIndex >= wordStart && charIndex <= wordEnd) {
+          targetWordIndex = i;
+          break;
+        }
+        currentPos = wordEnd;
+        targetWordIndex = i; // Default to last word if past the end
+      }
+
+      // Get words around the target
+      const halfCount = Math.floor(wordCount / 2);
+      const startIdx = Math.max(0, targetWordIndex - halfCount);
+      const endIdx = Math.min(words.length - 1, targetWordIndex + halfCount);
+
+      const contextWords = words.slice(startIdx, endIdx + 1);
+      return contextWords.join(' ').substring(0, 60); // Limit to 60 chars
     }
 
     function createMarker(type, note, slideNumber) {
@@ -551,7 +629,27 @@
       modal.addEventListener('click', handleOverlayClick);
     }
 
-    function showRetakeModal() {
+    // ============================================
+    // RETAKE MODE - Highlight text to mark restart point
+    // ============================================
+
+    let isRetakeMode = false;
+    const retakeBanner = document.getElementById('retakeBanner');
+    const retakeCancelBtn = document.getElementById('retakeCancelBtn');
+
+    // Store bound handlers so we can properly remove them
+    let boundRetakeMouseUp = null;
+    let boundRetakeKeydown = null;
+
+    function enterRetakeMode() {
+      console.log('🔴 enterRetakeMode called. Current state:', { isRetakeMode, hasBanner: !!retakeBanner });
+
+      // Prevent entering if already in retake mode
+      if (isRetakeMode) {
+        console.log('🔴 Already in retake mode - ignoring');
+        return;
+      }
+
       // Auto-pause teleprompter when marking retake
       if (isPlaying) {
         console.log('🔴 Retake clicked - auto-pausing teleprompter');
@@ -566,54 +664,315 @@
         }
       }
 
-      const modal = document.getElementById('retakeModal');
-      const input = document.getElementById('retakeInput');
-      const saveBtn = document.getElementById('retakeSaveBtn');
-      const cancelBtn = document.getElementById('retakeCancelBtn');
+      console.log('🔴 Setting retake mode active');
+      isRetakeMode = true;
 
-      input.value = '';
-      modal.classList.add('visible');
+      // Show banner
+      if (retakeBanner) {
+        retakeBanner.classList.add('active');
+        console.log('🔴 Banner shown');
+      } else {
+        console.error('🔴 ERROR: retakeBanner element not found!');
+      }
+
+      // Enable selection mode on script
+      if (monitorScriptText) {
+        monitorScriptText.classList.add('retake-mode');
+        console.log('🔴 Script text retake-mode class added');
+      } else {
+        console.error('🔴 ERROR: monitorScriptText element not found!');
+      }
+
+      // Create bound handlers
+      boundRetakeMouseUp = handleRetakeMouseUp.bind(this);
+      boundRetakeKeydown = handleRetakeKeydown.bind(this);
+
+      // Listen for escape key immediately
+      document.addEventListener('keydown', boundRetakeKeydown);
+
+      // Delay adding mouseup listener to avoid capturing the retake button click itself
       setTimeout(() => {
-        input.focus();
-      }, 50);
-
-      const handleSave = () => {
-        const startingAt = input.value.trim();
-        if (startingAt) {
-          createMarker('retake', `Starting at: ${startingAt}`, null);
-        } else {
-          // If no starting point provided, just mark as retake without location
-          createMarker('retake', 'Retake needed', null);
+        if (isRetakeMode && monitorScriptText) {
+          monitorScriptText.addEventListener('mouseup', boundRetakeMouseUp);
+          console.log('🔴 Mouseup listener attached to script text');
         }
-        modal.classList.remove('visible');
-        cleanup();
-      };
+      }, 100);
+    }
 
-      const handleCancel = () => {
-        modal.classList.remove('visible');
-        cleanup();
-      };
+    function exitRetakeMode(selectedText = null, highlightStart = null, highlightEnd = null) {
+      if (!isRetakeMode) return;
 
-      const cleanup = () => {
-        saveBtn.removeEventListener('click', handleSave);
-        cancelBtn.removeEventListener('click', handleCancel);
-        input.removeEventListener('keydown', handleKeyDown);
-        modal.removeEventListener('click', handleOverlayClick);
-      };
+      console.log('🔴 Exiting retake mode', selectedText ? `with: "${selectedText}"` : '(cancelled)');
+      isRetakeMode = false;
 
-      const handleKeyDown = (e) => {
-        if (e.key === 'Enter') handleSave();
-        else if (e.key === 'Escape') handleCancel();
-      };
+      // Hide banner
+      retakeBanner.classList.remove('active');
 
-      const handleOverlayClick = (e) => {
-        if (e.target === modal) handleCancel();
-      };
+      // Remove selection mode styling
+      monitorScriptText.classList.remove('retake-mode');
 
-      saveBtn.addEventListener('click', handleSave);
-      cancelBtn.addEventListener('click', handleCancel);
-      input.addEventListener('keydown', handleKeyDown);
-      modal.addEventListener('click', handleOverlayClick);
+      // Remove listeners
+      if (boundRetakeMouseUp) {
+        monitorScriptText.removeEventListener('mouseup', boundRetakeMouseUp);
+        boundRetakeMouseUp = null;
+      }
+      if (boundRetakeKeydown) {
+        document.removeEventListener('keydown', boundRetakeKeydown);
+        boundRetakeKeydown = null;
+      }
+
+      // Clear any text selection
+      window.getSelection().removeAllRanges();
+
+      // Create marker if text was selected
+      if (selectedText) {
+        createMarker('retake', `Restart at: "${selectedText}"`, null);
+
+        // Set as persistent highlight (purple) and sync to teleprompter
+        if (highlightStart !== null && highlightEnd !== null) {
+          clearPersistentHighlight();
+          persistentHighlightStart = highlightStart;
+          persistentHighlightEnd = highlightEnd;
+          applyPersistentHighlight();
+          syncHighlightToTeleprompter();
+          console.log('🔴 Synced retake highlight to teleprompter:', highlightStart, highlightEnd);
+        }
+      }
+    }
+
+    function handleRetakeMouseUp(e) {
+      console.log('🔴 handleRetakeMouseUp fired. isRetakeMode:', isRetakeMode, 'target:', e.target.className);
+
+      if (!isRetakeMode) {
+        console.log('🔴 Not in retake mode, ignoring mouseup');
+        return;
+      }
+
+      // Get the selected text
+      const selection = window.getSelection();
+      const selectedText = selection.toString().trim();
+
+      console.log('🔴 Selection text:', selectedText ? `"${selectedText}"` : '(empty)');
+
+      // If user selected text, use it
+      if (selectedText && selectedText.length > 0) {
+        console.log('🔴 User selected text:', selectedText);
+
+        // Find position in script for highlight sync
+        const editorText = scriptText.value;
+        const startIndex = editorText.indexOf(selectedText);
+
+        // Limit to 80 characters for readability in marker
+        const truncatedText = selectedText.length > 80
+          ? selectedText.substring(0, 77) + '...'
+          : selectedText;
+
+        if (startIndex !== -1) {
+          exitRetakeMode(truncatedText, startIndex, startIndex + selectedText.length);
+        } else {
+          exitRetakeMode(truncatedText);
+        }
+        return;
+      }
+
+      // If just a click (no selection), use clicked word + context
+      const wordEl = e.target.closest('.monitor-word');
+      if (wordEl) {
+        const allWords = Array.from(monitorScriptText.querySelectorAll('.monitor-word'));
+        const clickedIndex = allWords.indexOf(wordEl);
+        const clickedCharIndex = parseInt(wordEl.dataset.charIndex) || 0;
+
+        // Get surrounding words for context (2 words before, clicked word, 2 words after)
+        const startIdx = Math.max(0, clickedIndex - 2);
+        const endIdx = Math.min(allWords.length - 1, clickedIndex + 2);
+
+        let contextWords = [];
+        let highlightStart = clickedCharIndex;
+        let highlightEnd = clickedCharIndex + wordEl.textContent.length;
+
+        for (let i = startIdx; i <= endIdx; i++) {
+          if (i === clickedIndex) {
+            contextWords.push(`[${allWords[i].textContent}]`);
+          } else {
+            contextWords.push(allWords[i].textContent);
+          }
+        }
+
+        const contextText = contextWords.join(' ').replace(/\s+/g, ' ').trim();
+        console.log('🔴 Click context:', contextText);
+        exitRetakeMode(contextText, highlightStart, highlightEnd);
+      }
+    }
+
+    function handleRetakeKeydown(e) {
+      if (e.key === 'Escape' && isRetakeMode) {
+        e.preventDefault();
+        exitRetakeMode(null);
+      }
+    }
+
+    // Cancel button handler
+    if (retakeCancelBtn) {
+      retakeCancelBtn.addEventListener('click', () => {
+        exitRetakeMode(null);
+      });
+    }
+
+    // Legacy function name for compatibility
+    function showRetakeModal() {
+      enterRetakeMode();
+    }
+
+    // ============================================
+    // STUMBLE MODE - Highlight text to mark stumble point
+    // ============================================
+
+    let isStumbleMode = false;
+    const stumbleBanner = document.getElementById('stumbleBanner');
+    const stumbleCancelBtn = document.getElementById('stumbleCancelBtn');
+
+    // Store bound handlers so we can properly remove them
+    let boundStumbleMouseUp = null;
+    let boundStumbleKeydown = null;
+
+    function enterStumbleMode() {
+      console.log('⚡ enterStumbleMode called. Current state:', { isStumbleMode, hasBanner: !!stumbleBanner });
+
+      // Prevent entering if already in stumble mode
+      if (isStumbleMode) {
+        console.log('⚡ Already in stumble mode - ignoring');
+        return;
+      }
+
+      // Don't pause teleprompter for stumble - recording continues
+      console.log('⚡ Setting stumble mode active');
+      isStumbleMode = true;
+
+      // Show banner
+      if (stumbleBanner) {
+        stumbleBanner.classList.add('active');
+        console.log('⚡ Banner shown');
+      } else {
+        console.error('⚡ ERROR: stumbleBanner element not found!');
+      }
+
+      // Enable selection mode on script
+      if (monitorScriptText) {
+        monitorScriptText.classList.add('stumble-mode');
+        console.log('⚡ Script text stumble-mode class added');
+      } else {
+        console.error('⚡ ERROR: monitorScriptText element not found!');
+      }
+
+      // Create bound handlers
+      boundStumbleMouseUp = handleStumbleMouseUp.bind(this);
+      boundStumbleKeydown = handleStumbleKeydown.bind(this);
+
+      // Listen for escape key immediately
+      document.addEventListener('keydown', boundStumbleKeydown);
+
+      // Delay adding mouseup listener to avoid capturing the stumble button click itself
+      setTimeout(() => {
+        if (isStumbleMode && monitorScriptText) {
+          monitorScriptText.addEventListener('mouseup', boundStumbleMouseUp);
+          console.log('⚡ Mouseup listener attached to script text');
+        }
+      }, 100);
+    }
+
+    function exitStumbleMode(selectedText = null) {
+      if (!isStumbleMode) return;
+
+      console.log('⚡ Exiting stumble mode', selectedText ? `with: "${selectedText}"` : '(cancelled)');
+      isStumbleMode = false;
+
+      // Hide banner
+      stumbleBanner.classList.remove('active');
+
+      // Remove selection mode styling
+      monitorScriptText.classList.remove('stumble-mode');
+
+      // Remove listeners
+      if (boundStumbleMouseUp) {
+        monitorScriptText.removeEventListener('mouseup', boundStumbleMouseUp);
+        boundStumbleMouseUp = null;
+      }
+      if (boundStumbleKeydown) {
+        document.removeEventListener('keydown', boundStumbleKeydown);
+        boundStumbleKeydown = null;
+      }
+
+      // Clear any text selection
+      window.getSelection().removeAllRanges();
+
+      // Create marker if text was selected (without syncing to teleprompter)
+      if (selectedText) {
+        createMarker('stumble', `Stumble at: "${selectedText}"`, null);
+      }
+    }
+
+    function handleStumbleMouseUp(e) {
+      console.log('⚡ handleStumbleMouseUp fired. isStumbleMode:', isStumbleMode, 'target:', e.target.className);
+
+      if (!isStumbleMode) {
+        console.log('⚡ Not in stumble mode, ignoring mouseup');
+        return;
+      }
+
+      // Get the selected text
+      const selection = window.getSelection();
+      const selectedText = selection.toString().trim();
+
+      console.log('⚡ Selection text:', selectedText ? `"${selectedText}"` : '(empty)');
+
+      // If user selected text, use it
+      if (selectedText && selectedText.length > 0) {
+        console.log('⚡ User selected text:', selectedText);
+        // Limit to 80 characters for readability
+        const truncatedText = selectedText.length > 80
+          ? selectedText.substring(0, 77) + '...'
+          : selectedText;
+        exitStumbleMode(truncatedText);
+        return;
+      }
+
+      // If just a click (no selection), use clicked word + context
+      const wordEl = e.target.closest('.monitor-word');
+      if (wordEl) {
+        const allWords = Array.from(monitorScriptText.querySelectorAll('.monitor-word'));
+        const clickedIndex = allWords.indexOf(wordEl);
+
+        // Get surrounding words for context (2 words before, clicked word, 2 words after)
+        const startIdx = Math.max(0, clickedIndex - 2);
+        const endIdx = Math.min(allWords.length - 1, clickedIndex + 2);
+
+        let contextWords = [];
+        for (let i = startIdx; i <= endIdx; i++) {
+          if (i === clickedIndex) {
+            contextWords.push(`[${allWords[i].textContent}]`);
+          } else {
+            contextWords.push(allWords[i].textContent);
+          }
+        }
+
+        const contextText = contextWords.join(' ').replace(/\s+/g, ' ').trim();
+        console.log('⚡ Click context:', contextText);
+        exitStumbleMode(contextText);
+      }
+    }
+
+    function handleStumbleKeydown(e) {
+      if (e.key === 'Escape' && isStumbleMode) {
+        e.preventDefault();
+        exitStumbleMode(null);
+      }
+    }
+
+    // Cancel button handler
+    if (stumbleCancelBtn) {
+      stumbleCancelBtn.addEventListener('click', () => {
+        exitStumbleMode(null);
+      });
     }
 
     function showMarkerFeedback(type) {
@@ -633,7 +992,7 @@
       recordingMarkerRetake.addEventListener('click', () => addProblemMarker('retake'));
     }
     if (recordingMarkerStumble) {
-      recordingMarkerStumble.addEventListener('click', () => addProblemMarker('stumble'));
+      recordingMarkerStumble.addEventListener('click', () => enterStumbleMode());
     }
     if (recordingMarkerNote) {
       recordingMarkerNote.addEventListener('click', () => addProblemMarker('note'));
@@ -728,14 +1087,11 @@
         return;
       }
 
-      if (recordingCountdownCheckbox.checked) {
-        const seconds = parseInt(recordingCountdownSeconds.value);
-        runRecordingCountdown(seconds, () => {
-          actuallyStartRecording();
-        });
-      } else {
+      // Always run countdown before starting recording
+      const seconds = parseInt(recordingCountdownSeconds.value);
+      runRecordingCountdown(seconds, () => {
         actuallyStartRecording();
-      }
+      });
     }
 
     function actuallyStartRecording() {
@@ -743,6 +1099,15 @@
       isRecording = true;
       sessionStartTime = Date.now();
       scriptStartTime = Date.now();
+
+      // Clear timeline markers for fresh recording
+      problemMarkers = [];
+      // Also clear markers from current script
+      const currentScript = scripts.find(s => s.id === currentScriptId);
+      if (currentScript) {
+        currentScript.markers = [];
+      }
+      console.log('🧹 Timeline markers cleared for new recording');
 
       // Update button UI
       toggleRecordingBtn.innerHTML = `
@@ -792,12 +1157,33 @@
     // RECORDING TIMELINE UI
     // ============================================
 
+    // Update timeline filename preview to show where file will be saved
+    function updateTimelineFilenamePreview() {
+      if (!timelineFilenamePreview) return;
+
+      const currentScript = scripts.find(s => s.id === currentScriptId);
+      const scriptName = currentScript ? currentScript.name : 'Untitled';
+      const safeName = scriptName.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+      // Generate preview filename with current time
+      const now = new Date();
+      const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS
+      const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
+
+      const previewFilename = `${dateStr}/${safeName}_${timeStr}.txt`;
+      timelineFilenamePreview.textContent = previewFilename;
+      timelineFilenamePreview.title = `Full path: Flowstate Timelines/${previewFilename}`;
+    }
+
     // Update recording pane timeline (simplified view)
     function updateRecordingTimeline() {
       // Update marker count
       if (markerCountSmall) {
         markerCountSmall.textContent = `${problemMarkers.length} marker${problemMarkers.length !== 1 ? 's' : ''}`;
       }
+
+      // Update filename preview
+      updateTimelineFilenamePreview();
 
       if (!recordingTimelineContent) return;
 
@@ -1334,6 +1720,11 @@
 
       // Scroll to the highlighted text if there was a selection
       if (hasSelection) {
+        console.log('🎯 [POSITION-DEBUG] Jump to monitor with selection:', {
+          selectionStart,
+          selectionEnd,
+          selectedText: scriptText.value.substring(selectionStart, Math.min(selectionEnd, selectionStart + 50)) + '...'
+        });
         requestAnimationFrame(() => {
           // Find first highlighted element to scroll to
           const firstHighlighted = monitorScriptText.querySelector('.editor-highlight-wrapper, .editor-highlight');
@@ -1341,6 +1732,13 @@
             const textHeight = monitorScriptWrapper.scrollHeight;
             const wordTop = firstHighlighted.offsetTop;
             const percent = Math.min(100, Math.max(0, Math.round((wordTop / textHeight) * 100)));
+
+            console.log('🎯 [POSITION-DEBUG] Calculated highlight position:', {
+              textHeight,
+              wordTop,
+              percent,
+              highlightElement: firstHighlighted.textContent.substring(0, 30) + '...'
+            });
 
             // Update position and apply
             targetPosition = percent;
@@ -1350,6 +1748,12 @@
             if (positionValueHeader) positionValueHeader.textContent = percent + '%';
             monitorProgressBar.style.width = percent + '%';
             monitorPercent.textContent = percent + '%';
+
+            // Sync position to teleprompter immediately so it's ready when playback starts
+            console.log('🎯 [POSITION-DEBUG] Sending jump-to-position to teleprompter:', percent);
+            ipcRenderer.send('jump-to-position', percent);
+          } else {
+            console.warn('🎯 [POSITION-DEBUG] No highlighted element found!');
           }
         });
       }
@@ -1744,7 +2148,6 @@
           speed: parseInt(speedSlider.value),
           countdownEnabled: countdownCheckbox.checked,
           countdownSeconds: parseInt(countdownSeconds.value),
-          recordingCountdownEnabled: recordingCountdownCheckbox.checked,
           recordingCountdownSeconds: parseInt(recordingCountdownSeconds.value)
         }
       };
@@ -1785,9 +2188,7 @@
           speedValueHeader.textContent = speedSlider.value;
           countdownCheckbox.checked = data.settings.countdownEnabled !== false;
           countdownSeconds.value = data.settings.countdownSeconds || 3;
-          recordingCountdownCheckbox.checked = data.settings.recordingCountdownEnabled !== false;
           recordingCountdownSeconds.value = data.settings.recordingCountdownSeconds || 5;
-          recordingCountdownRow.style.display = recordingCountdownCheckbox.checked ? 'flex' : 'none';
         }
 
         updateCharCount();
@@ -1964,6 +2365,12 @@
         monitorProgressBar.style.width = state.position + '%';
         monitorPercent.textContent = Math.round(state.position) + '%';
       }
+      console.log('🎯 [POSITION-DEBUG] sendPlaybackState:', {
+        includePosition,
+        isPlaying: state.isPlaying,
+        position: state.position,
+        sliderValue: positionSlider.value
+      });
       ipcRenderer.send('playback-control', state);
     }
 
@@ -2145,13 +2552,6 @@
     // Initialize countdown row visibility
     countdownRow.style.display = countdownCheckbox.checked ? 'flex' : 'none';
 
-    // Toggle recording countdown seconds visibility based on checkbox
-    recordingCountdownCheckbox.addEventListener('change', () => {
-      recordingCountdownRow.style.display = recordingCountdownCheckbox.checked ? 'flex' : 'none';
-    });
-    // Initialize recording countdown row visibility
-    recordingCountdownRow.style.display = recordingCountdownCheckbox.checked ? 'flex' : 'none';
-
     // Script text change
     scriptText.addEventListener('input', () => {
       clearTimeout(scriptText.sendTimeout);
@@ -2205,6 +2605,8 @@
     // Click/Selection in monitor: set persistent highlight (shows reader where to start)
     monitorScriptText.addEventListener('mouseup', (e) => {
       if (isMonitorEditing) return; // Don't sync during editing
+      if (isRetakeMode) return; // Let retake mode handler process the selection
+      if (isStumbleMode) return; // Let stumble mode handler process the selection
 
       const selection = window.getSelection();
 

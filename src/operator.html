@@ -288,28 +288,44 @@
 
         <!-- Playback Section -->
         <div class="setup-section">
-          <div class="setup-section-label">Playback</div>
-          <div class="setup-toggle-row">
-            <span class="setup-option-label">Teleprompter Countdown</span>
-            <label class="setup-toggle">
-              <input type="checkbox" id="countdownCheckbox" checked>
-              <span class="setup-toggle-track"></span>
-            </label>
+          <div class="setup-section-label">Countdowns</div>
+
+          <!-- Teleprompter Countdown Group -->
+          <div class="setup-subsection">
+            <div class="setup-subsection-label">
+              <span class="setup-subsection-icon">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"/><path d="M9 8h2v8H9zm4 0h2v8h-2z"/></svg>
+              </span>
+              Teleprompter
+            </div>
+            <div class="setup-toggle-row">
+              <span class="setup-option-label">Enable Countdown</span>
+              <label class="setup-toggle">
+                <input type="checkbox" id="countdownCheckbox" checked>
+                <span class="setup-toggle-track"></span>
+              </label>
+            </div>
+            <div class="setup-option-row" id="countdownRow">
+              <span class="setup-option-label">Seconds</span>
+              <input type="number" class="setup-number" id="countdownSeconds" value="3" min="1" max="10">
+            </div>
           </div>
-          <div class="setup-option-row" id="countdownRow">
-            <span class="setup-option-label">Seconds</span>
-            <input type="number" class="setup-number" id="countdownSeconds" value="3" min="1" max="10">
-          </div>
-          <div class="setup-toggle-row">
-            <span class="setup-option-label">Recording Countdown</span>
-            <label class="setup-toggle">
-              <input type="checkbox" id="recordingCountdownCheckbox" checked>
-              <span class="setup-toggle-track"></span>
-            </label>
-          </div>
-          <div class="setup-option-row" id="recordingCountdownRow">
-            <span class="setup-option-label">Seconds</span>
-            <input type="number" class="setup-number" id="recordingCountdownSeconds" value="5" min="1" max="30">
+
+          <!-- Divider -->
+          <div class="setup-divider"></div>
+
+          <!-- Recording Countdown Group -->
+          <div class="setup-subsection">
+            <div class="setup-subsection-label">
+              <span class="setup-subsection-icon recording">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+              </span>
+              Recording
+            </div>
+            <div class="setup-option-row">
+              <span class="setup-option-label">Countdown Seconds</span>
+              <input type="number" class="setup-number" id="recordingCountdownSeconds" value="5" min="1" max="30">
+            </div>
           </div>
         </div>
 
@@ -354,6 +370,30 @@
 
       <!-- ========== RECORDING PANE ========== -->
       <div class="pane recording-pane" id="recordingPane" style="display: none;">
+
+        <!-- Retake Mode Banner -->
+        <div class="retake-mode-banner" id="retakeBanner">
+          <div class="retake-mode-content">
+            <span class="retake-mode-icon">🔴</span>
+            <span class="retake-mode-text">RETAKE MODE — Highlight the text where talent should restart</span>
+          </div>
+          <button class="retake-mode-cancel" id="retakeCancelBtn">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+            Cancel
+          </button>
+        </div>
+
+        <!-- Stumble Mode Banner -->
+        <div class="stumble-mode-banner" id="stumbleBanner">
+          <div class="stumble-mode-content">
+            <span class="stumble-mode-icon">⚡</span>
+            <span class="stumble-mode-text">STUMBLE MODE — Highlight the text where the stumble occurred</span>
+          </div>
+          <button class="stumble-mode-cancel" id="stumbleCancelBtn">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+            Cancel
+          </button>
+        </div>
 
         <!-- Recording Pane Header -->
         <div class="pane-header">
@@ -404,7 +444,16 @@
         <div class="rec-timeline">
           <div class="rec-timeline-header">
             <span>Timeline</span>
-            <span class="rec-timeline-count" id="markerCountSmall">0</span>
+            <span class="rec-timeline-count" id="markerCountSmall">0 markers</span>
+          </div>
+          <div class="rec-timeline-save-info" id="timelineSaveInfo">
+            <div class="save-info-icon">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M17 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm2 16H5V5h11.17L19 7.83V19zm-7-7c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3zM6 6h9v4H6z"/></svg>
+            </div>
+            <div class="save-info-text">
+              <span class="save-info-label">Saves to:</span>
+              <span class="save-info-filename" id="timelineFilenamePreview">Untitled_00-00-00.txt</span>
+            </div>
           </div>
           <div class="rec-timeline-content" id="recordingTimelineContent">
             <div class="rec-timeline-empty">No markers yet</div>

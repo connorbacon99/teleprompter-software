@@ -491,6 +491,13 @@
 
     // Receive playback commands
     ipcRenderer.on('playback-update', (event, state) => {
+      console.log('🎯 [POSITION-DEBUG] playback-update received:', {
+        statePosition: state.position,
+        stateIsPlaying: state.isPlaying,
+        currentIsPlaying: isPlaying,
+        currentPosition
+      });
+
       if (state.reset) {
         cancelCountdown();
         // Cancel any running animation
@@ -511,10 +518,18 @@
       // Check if this is a resume (going from paused to playing)
       const isResuming = !isPlaying && state.isPlaying;
 
+      console.log('🎯 [POSITION-DEBUG] isResuming check:', {
+        isResuming,
+        willApplyPosition: state.position !== undefined && !isResuming
+      });
+
       // Only apply position if NOT resuming - when resuming, continue from current position
       // This prevents the "jump" when starting playback
       if (state.position !== undefined && !isResuming) {
+        console.log('🎯 [POSITION-DEBUG] Applying position from playback-update:', state.position);
         updatePosition(state.position);
+      } else if (isResuming) {
+        console.log('🎯 [POSITION-DEBUG] Skipping position update (resuming from current position)');
       }
 
       if (state.isPlaying !== isPlaying) {
@@ -670,12 +685,18 @@
       }
     }
 
-    // Jump to specific position (for cue markers - instant jump)
+    // Jump to specific position (for cue markers and highlight sync - instant jump)
     ipcRenderer.on('jump-to-position', (event, percent) => {
+      console.log('🎯 [POSITION-DEBUG] Teleprompter received jump-to-position:', {
+        percent,
+        currentPosition,
+        isPlaying
+      });
       // Stop any voice follow animation
       stopFollowMode();
       // Direct position update for cue markers
       updatePosition(percent);
+      console.log('🎯 [POSITION-DEBUG] After updatePosition, currentPosition:', currentPosition);
     });
 
     // Track highlight range
