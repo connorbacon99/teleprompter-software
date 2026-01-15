@@ -33,9 +33,7 @@ let currentState = {
     mirror: false,
     flip: false,
     countdownEnabled: true,
-    countdownSeconds: 3,
-    recordingCountdownEnabled: true,
-    recordingCountdownSeconds: 5
+    countdownSeconds: 3
   }
 };
 

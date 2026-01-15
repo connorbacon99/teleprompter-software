@@ -22,12 +22,6 @@
     const countdownCheckbox = document.getElementById('countdownCheckbox');
     const countdownSeconds = document.getElementById('countdownSeconds');
     const countdownRow = document.getElementById('countdownRow');
-    const recordingCountdownCheckbox = document.getElementById('recordingCountdownCheckbox');
-    const recordingCountdownSeconds = document.getElementById('recordingCountdownSeconds');
-    const recordingCountdownRow = document.getElementById('recordingCountdownRow');
-    const recordingCountdownOverlay = document.getElementById('recordingCountdownOverlay');
-    const recordingCountdownNumber = document.getElementById('recordingCountdownNumber');
-    const recordingCountdownText = document.getElementById('recordingCountdownText');
     const noRecordingModal = document.getElementById('noRecordingModal');
 
     // Helper to set textarea value while preserving undo stack
@@ -112,7 +106,6 @@
     let sessionStartTime = null;
     let scriptStartTime = null;
     let timerInterval = null;
-    let recordingCountdownInterval = null;
 
     // Problem markers
     let problemMarkers = [];
@@ -644,7 +637,7 @@
     // ============================================
 
     function startRecording() {
-      startRecordingWithCountdown();
+      startRecording();
     }
 
     function stopRecording() {
@@ -680,62 +673,12 @@
       }
     }
 
-    // Recording countdown functions
-    function runRecordingCountdown(seconds, callback) {
-      let count = seconds;
-      const ringEl = recordingCountdownOverlay.querySelector('.recording-countdown-ring');
-      const pulseEl = recordingCountdownOverlay.querySelector('.recording-countdown-pulse');
-
-      recordingCountdownNumber.textContent = count;
-      recordingCountdownNumber.className = 'recording-countdown-number';
-      recordingCountdownText.textContent = 'Recording starts in...';
-      recordingCountdownText.className = 'recording-countdown-text';
-      if (ringEl) ringEl.classList.remove('recording');
-      if (pulseEl) pulseEl.classList.remove('recording');
-      recordingCountdownOverlay.classList.add('visible');
-
-      recordingCountdownInterval = setInterval(() => {
-        count--;
-        if (count > 0) {
-          recordingCountdownNumber.textContent = count;
-        } else if (count === 0) {
-          recordingCountdownNumber.textContent = 'REC';
-          recordingCountdownNumber.className = 'recording-countdown-number recording';
-          recordingCountdownText.textContent = 'RECORDING';
-          recordingCountdownText.className = 'recording-countdown-text recording';
-          if (ringEl) ringEl.classList.add('recording');
-          if (pulseEl) pulseEl.classList.add('recording');
-        } else {
-          clearInterval(recordingCountdownInterval);
-          recordingCountdownInterval = null;
-          recordingCountdownOverlay.classList.remove('visible');
-          if (callback) callback();
-        }
-      }, 1000);
-    }
-
-    function cancelRecordingCountdown() {
-      if (recordingCountdownInterval) {
-        clearInterval(recordingCountdownInterval);
-        recordingCountdownInterval = null;
-      }
-      recordingCountdownOverlay.classList.remove('visible');
-    }
-
-    function startRecordingWithCountdown() {
+    function startRecording() {
       if (isRecording) {
         console.log('Recording already active');
         return;
       }
-
-      if (recordingCountdownCheckbox.checked) {
-        const seconds = parseInt(recordingCountdownSeconds.value);
-        runRecordingCountdown(seconds, () => {
-          actuallyStartRecording();
-        });
-      } else {
-        actuallyStartRecording();
-      }
+      actuallyStartRecording();
     }
 
     function actuallyStartRecording() {
@@ -942,7 +885,7 @@
 
     document.getElementById('noRecordingStartRecordingBtn').addEventListener('click', () => {
       noRecordingModal.classList.remove('visible');
-      startRecordingWithCountdown();
+      startRecording();
     });
 
     function showStopRecordingConfirmation() {
@@ -1699,9 +1642,7 @@
           flip: flipCheckbox.checked,
           speed: parseInt(speedSlider.value),
           countdownEnabled: countdownCheckbox.checked,
-          countdownSeconds: parseInt(countdownSeconds.value),
-          recordingCountdownEnabled: recordingCountdownCheckbox.checked,
-          recordingCountdownSeconds: parseInt(recordingCountdownSeconds.value)
+          countdownSeconds: parseInt(countdownSeconds.value)
         }
       };
 
@@ -1741,9 +1682,6 @@
           speedValueHeader.textContent = speedSlider.value;
           countdownCheckbox.checked = data.settings.countdownEnabled !== false;
           countdownSeconds.value = data.settings.countdownSeconds || 3;
-          recordingCountdownCheckbox.checked = data.settings.recordingCountdownEnabled !== false;
-          recordingCountdownSeconds.value = data.settings.recordingCountdownSeconds || 5;
-          recordingCountdownRow.style.display = recordingCountdownCheckbox.checked ? 'flex' : 'none';
         }
 
         updateCharCount();
@@ -2097,13 +2035,6 @@
     // Initialize countdown row visibility
     countdownRow.style.display = countdownCheckbox.checked ? 'flex' : 'none';
 
-    // Toggle recording countdown seconds visibility based on checkbox
-    recordingCountdownCheckbox.addEventListener('change', () => {
-      recordingCountdownRow.style.display = recordingCountdownCheckbox.checked ? 'flex' : 'none';
-    });
-    // Initialize recording countdown row visibility
-    recordingCountdownRow.style.display = recordingCountdownCheckbox.checked ? 'flex' : 'none';
-
     // Script text change
     scriptText.addEventListener('input', () => {
       clearTimeout(scriptText.sendTimeout);
@@ -2305,46 +2236,53 @@
     document.addEventListener('keydown', (e) => {
       console.log('🎹 Keydown:', e.code, 'Target:', e.target.tagName, 'ID:', e.target.id);
 
-      // Escape key cancels recording countdown (works even in inputs/modals)
-      if (e.code === 'Escape' && recordingCountdownInterval) {
-        console.log('   ✅ Escape - cancelling recording countdown');
-        e.preventDefault();
-        cancelRecordingCountdown();
-        return;
-      }
-
-      // Skip ALL shortcuts during recording countdown (except escape above)
-      if (recordingCountdownInterval) {
-        console.log('   Skipping shortcuts - recording countdown active');
-        e.preventDefault();
-        return;
-      }
-
-      // Skip ALL keyboard shortcuts when typing in any input field or modal
-      const isInInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
+      // Determine element types
       const isInModal = e.target.closest('.modal') || e.target.closest('.modal-overlay');
       const isContentEditable = e.target.isContentEditable;
+      const isTextarea = e.target.tagName === 'TEXTAREA';
 
-      if (isInInput || isInModal || isContentEditable) {
-        console.log('   Skipping shortcuts - in input/modal/contentEditable');
+      // Text-type inputs where spacebar should type a space
+      const textInputTypes = ['text', 'search', 'email', 'password', 'url', 'tel'];
+      const isTextInput = e.target.tagName === 'INPUT' && textInputTypes.includes(e.target.type);
+
+      // Non-text inputs (checkboxes, range sliders, number) - spacebar should trigger play/pause
+      const isNonTextInput = e.target.tagName === 'INPUT' && !textInputTypes.includes(e.target.type);
+
+      // For text inputs, textareas, modals, and contentEditable - let spacebar work normally
+      if (e.code === 'Space' && (isTextInput || isTextarea || isInModal || isContentEditable)) {
+        console.log('   Allowing spacebar for typing in text field');
+        return; // Let browser handle normally (type a space)
+      }
+
+      // For non-text inputs (checkboxes, sliders) - spacebar should trigger play/pause instead
+      if (e.code === 'Space' && isNonTextInput) {
+        console.log('   Space on checkbox/slider - triggering play/pause instead');
+        e.preventDefault();
+        e.target.blur(); // Remove focus from the control
+        headerPlayPauseBtn.click();
         return;
       }
 
-      // For spacebar, check if monitor view is active - if so, always trigger play/pause
-      // (unless actively typing in find input or editing in monitor)
+      // Skip other shortcuts when in any input/modal (but spacebar was handled above)
+      if (isTextInput || isTextarea || isInModal || isContentEditable || isNonTextInput) {
+        console.log('   Skipping non-space shortcuts - in input/modal/contentEditable');
+        return;
+      }
+
+      // For spacebar anywhere else - trigger play/pause
       if (e.code === 'Space') {
         const monitorActive = monitorView.classList.contains('active');
-        const isInFindInput = e.target.id === 'findTextInput';
+        console.log('   Space pressed - Monitor active:', monitorActive, 'isMonitorEditing:', isMonitorEditing);
 
-        console.log('   Space pressed - Monitor active:', monitorActive, 'Find input:', isInFindInput, 'isMonitorEditing:', isMonitorEditing);
-
-        // Allow spacebar for play/pause if monitor is active and not in specific inputs or editing
-        if (monitorActive && !isInFindInput && !isMonitorEditing) {
-          console.log('   ✅ Space key - triggering play/pause (monitor view active)');
-          e.preventDefault();
-          headerPlayPauseBtn.click();
+        if (isMonitorEditing) {
+          console.log('   Skipping - monitor editing mode active');
           return;
         }
+
+        console.log('   ✅ Space key - triggering play/pause');
+        e.preventDefault();
+        headerPlayPauseBtn.click();
+        return;
       }
 
       // Arrow keys for speed adjustment
