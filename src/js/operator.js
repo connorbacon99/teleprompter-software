@@ -22,6 +22,12 @@
     const countdownCheckbox = document.getElementById('countdownCheckbox');
     const countdownSeconds = document.getElementById('countdownSeconds');
     const countdownRow = document.getElementById('countdownRow');
+    const recordingCountdownCheckbox = document.getElementById('recordingCountdownCheckbox');
+    const recordingCountdownSeconds = document.getElementById('recordingCountdownSeconds');
+    const recordingCountdownRow = document.getElementById('recordingCountdownRow');
+    const recordingCountdownOverlay = document.getElementById('recordingCountdownOverlay');
+    const recordingCountdownNumber = document.getElementById('recordingCountdownNumber');
+    const recordingCountdownText = document.getElementById('recordingCountdownText');
     const noRecordingModal = document.getElementById('noRecordingModal');
 
     // Helper to set textarea value while preserving undo stack
@@ -57,13 +63,61 @@
     function renderCueList() {
       // Cue feature removed - stub to prevent errors
     }
-    let monitorPosition = 0;
     let teleprompterDimensions = { width: 1920, height: 1080 }; // Updated when teleprompter opens
     let monitorCountdownInterval = null;
-    // Monitor scroll animation state
-    let targetPosition = 0;
-    let currentDisplayPosition = 0;
-    let scrollAnimationId = null;
+    // Unified position state
+    let targetPosition = 0;          // Where we want to be (0-100%)
+    let displayPosition = 0;         // Where we currently show (eased toward target)
+    let animFrameId = null;          // Single rAF id for the unified loop
+    let operatorAuthorityUntil = 0;  // timestamp — operator controls position until this time
+    let positionDirty = false;        // true when user explicitly changed position — cleared after send
+
+    // Unified animation loop - handles both playback interpolation and wheel scroll easing
+    const EASE_FACTOR = 0.35;       // Lower = smoother, higher = snappier
+    const SNAP_THRESHOLD = 0.005;   // % — when close enough, snap to target
+
+    function animationTick() {
+      const diff = targetPosition - displayPosition;
+      if (Math.abs(diff) < SNAP_THRESHOLD) {
+        displayPosition = targetPosition;
+        animFrameId = null;           // Stop — will restart on next position change
+      } else {
+        displayPosition += diff * EASE_FACTOR;
+        animFrameId = requestAnimationFrame(animationTick);
+      }
+      updatePositionUI(displayPosition);
+    }
+
+    function ensureAnimationRunning() {
+      if (!animFrameId) {
+        animFrameId = requestAnimationFrame(animationTick);
+      }
+    }
+
+    function stopAnimation() {
+      if (animFrameId) {
+        cancelAnimationFrame(animFrameId);
+        animFrameId = null;
+      }
+    }
+
+    function claimOperatorAuthority(durationMs = 300) {
+      operatorAuthorityUntil = Date.now() + durationMs;
+    }
+
+    function isOperatorAuthority() {
+      return Date.now() < operatorAuthorityUntil;
+    }
+
+    // Single place that updates slider, progress bar, percent text, and monitor transform
+    function updatePositionUI(percent) {
+      const clamped = Math.min(100, Math.max(0, percent));
+      positionSlider.value = clamped;
+      if (positionValueHeader) positionValueHeader.textContent = Math.round(clamped) + '%';
+      applyMonitorPosition(clamped);
+      monitorProgressBar.style.width = clamped + '%';
+      monitorPercent.textContent = Math.round(clamped) + '%';
+    }
 
     // ============================================
     // PHASE 1: MULTI-SCRIPT SESSION MANAGEMENT
@@ -106,6 +160,7 @@
     let sessionStartTime = null;
     let scriptStartTime = null;
     let timerInterval = null;
+    let recordingCountdownInterval = null;
 
     // Problem markers
     let problemMarkers = [];
@@ -175,7 +230,11 @@
         renderCueList();
         sendScript();
         updateMonitorText();
-        updateMonitorPosition({ percent: 0 });
+        targetPosition = 0;
+        displayPosition = 0;
+        positionDirty = true;
+        stopAnimation();
+        updatePositionUI(0);
 
         // Update file name display
         fileName.textContent = script.name;
@@ -428,7 +487,7 @@
         scriptTime: scriptTime,
         scriptId: currentScriptId,
         scriptName: currentScript.name,
-        position: monitorPosition,
+        position: targetPosition,
         note: note || '',
         slideNumber: slideNumber
       };
@@ -636,8 +695,61 @@
     // RECORDING TIMER
     // ============================================
 
+    // Recording countdown functions
+    function runRecordingCountdown(seconds, callback) {
+      let count = seconds;
+      const ringEl = recordingCountdownOverlay.querySelector('.recording-countdown-ring');
+      const pulseEl = recordingCountdownOverlay.querySelector('.recording-countdown-pulse');
+
+      recordingCountdownNumber.textContent = count;
+      recordingCountdownNumber.className = 'recording-countdown-number';
+      recordingCountdownText.textContent = 'Recording starts in...';
+      recordingCountdownText.className = 'recording-countdown-text';
+      if (ringEl) ringEl.classList.remove('recording');
+      if (pulseEl) pulseEl.classList.remove('recording');
+      recordingCountdownOverlay.classList.add('visible');
+
+      recordingCountdownInterval = setInterval(() => {
+        count--;
+        if (count > 0) {
+          recordingCountdownNumber.textContent = count;
+        } else if (count === 0) {
+          recordingCountdownNumber.textContent = 'REC';
+          recordingCountdownNumber.className = 'recording-countdown-number recording';
+          recordingCountdownText.textContent = 'RECORDING';
+          recordingCountdownText.className = 'recording-countdown-text recording';
+          if (ringEl) ringEl.classList.add('recording');
+          if (pulseEl) pulseEl.classList.add('recording');
+        } else {
+          clearInterval(recordingCountdownInterval);
+          recordingCountdownInterval = null;
+          recordingCountdownOverlay.classList.remove('visible');
+          if (callback) callback();
+        }
+      }, 1000);
+    }
+
+    function cancelRecordingCountdown() {
+      if (recordingCountdownInterval) {
+        clearInterval(recordingCountdownInterval);
+        recordingCountdownInterval = null;
+      }
+      recordingCountdownOverlay.classList.remove('visible');
+    }
+
     function startRecording() {
-      startRecording();
+      if (isRecording) {
+        console.log('Recording already active');
+        return;
+      }
+      if (recordingCountdownCheckbox.checked) {
+        const seconds = parseInt(recordingCountdownSeconds.value);
+        runRecordingCountdown(seconds, () => {
+          actuallyStartRecording();
+        });
+      } else {
+        actuallyStartRecording();
+      }
     }
 
     function stopRecording() {
@@ -673,19 +785,18 @@
       }
     }
 
-    function startRecording() {
-      if (isRecording) {
-        console.log('Recording already active');
-        return;
-      }
-      actuallyStartRecording();
-    }
-
     function actuallyStartRecording() {
       console.log('🔴 Starting recording session...');
       isRecording = true;
       sessionStartTime = Date.now();
       scriptStartTime = Date.now();
+
+      // Clear markers from previous recording so the timeline tracks this recording only
+      problemMarkers = [];
+      const currentScript = scripts.find(s => s.id === currentScriptId);
+      if (currentScript) {
+        currentScript.markers = [];
+      }
 
       // Update button UI
       toggleRecordingBtn.innerHTML = `
@@ -1222,10 +1333,7 @@
       monitorView.classList.remove('active');
 
       // Cancel any running monitor scroll animation when switching away from monitor view
-      if (scrollAnimationId) {
-        cancelAnimationFrame(scrollAnimationId);
-        scrollAnimationId = null;
-      }
+      stopAnimation();
 
       // If user clicked on a word in monitor, position cursor there
       if (lastMonitorClickPosition !== null) {
@@ -1281,18 +1389,25 @@
           // Find first highlighted element to scroll to
           const firstHighlighted = monitorScriptText.querySelector('.editor-highlight-wrapper, .editor-highlight');
           if (firstHighlighted) {
+            // Use the same percentage formula as the teleprompter:
+            // position is relative to the full scroll range (startY to endY)
+            const containerHeight = teleprompterDimensions.height;
             const textHeight = monitorScriptWrapper.scrollHeight;
+            const startY = containerHeight * 0.5;
+            const endY = -textHeight + (containerHeight * 0.5);
+            const range = startY - endY;
+            // offsetTop is relative to the script-wrapper, which has 10% padding
             const wordTop = firstHighlighted.offsetTop;
-            const percent = Math.min(100, Math.max(0, Math.round((wordTop / textHeight) * 100)));
+            const targetY = startY - wordTop;
+            const percent = range > 0
+              ? Math.min(100, Math.max(0, ((startY - targetY) / range) * 100))
+              : 0;
 
             // Update position and apply
             targetPosition = percent;
-            currentDisplayPosition = percent;
-            applyMonitorPosition(percent);
-            positionSlider.value = percent;
-            if (positionValueHeader) positionValueHeader.textContent = percent + '%';
-            monitorProgressBar.style.width = percent + '%';
-            monitorPercent.textContent = percent + '%';
+            displayPosition = percent;
+            positionDirty = true;
+            updatePositionUI(percent);
           }
         });
       }
@@ -1466,34 +1581,12 @@
       monitorScriptWrapper.style.transform = `translateY(${position}px)`;
     }
 
-    // Update monitor position display (progress bar and percentage)
-    function updateMonitorPosition(positionData) {
-      const percent = positionData.percent || 0;
-      monitorPosition = percent;
-      monitorProgressBar.style.width = `${percent}%`;
-      monitorPercent.textContent = `${Math.round(percent)}%`;
-
-      // Calculate position using the same formula as teleprompter
-      // This ensures sync regardless of teleprompter display resolution
-      applyMonitorPosition(percent);
-    }
-
     // Receive position updates from teleprompter
     ipcRenderer.on('monitor-position', (event, positionData) => {
+      if (isOperatorAuthority()) return;   // Operator is scrolling — ignore teleprompter
       const percent = positionData.percent || 0;
-
-      // Sync position
       targetPosition = percent;
-      currentDisplayPosition = percent;
-
-      updateMonitorPosition(positionData);
-      positionSlider.value = percent;
-      if (document.getElementById('positionValue')) {
-        document.getElementById('positionValue').textContent = Math.round(percent) + '%';
-      }
-      if (positionValueHeader) {
-        positionValueHeader.textContent = Math.round(percent) + '%';
-      }
+      ensureAnimationRunning();
     });
 
     // Initialize monitor when teleprompter opens
@@ -1614,7 +1707,11 @@
             renderCueList();
             sendScript();
             updateMonitorText();
-            updateMonitorPosition({ percent: 0 });
+            targetPosition = 0;
+            displayPosition = 0;
+            positionDirty = true;
+            stopAnimation();
+            updatePositionUI(0);
           } else {
             alert('Error reading file: ' + result.error);
           }
@@ -1642,7 +1739,9 @@
           flip: flipCheckbox.checked,
           speed: parseInt(speedSlider.value),
           countdownEnabled: countdownCheckbox.checked,
-          countdownSeconds: parseInt(countdownSeconds.value)
+          countdownSeconds: parseInt(countdownSeconds.value),
+          recordingCountdownEnabled: recordingCountdownCheckbox.checked,
+          recordingCountdownSeconds: parseInt(recordingCountdownSeconds.value)
         }
       };
 
@@ -1682,6 +1781,9 @@
           speedValueHeader.textContent = speedSlider.value;
           countdownCheckbox.checked = data.settings.countdownEnabled !== false;
           countdownSeconds.value = data.settings.countdownSeconds || 3;
+          recordingCountdownCheckbox.checked = data.settings.recordingCountdownEnabled !== false;
+          recordingCountdownSeconds.value = data.settings.recordingCountdownSeconds || 5;
+          recordingCountdownRow.style.display = recordingCountdownCheckbox.checked ? 'flex' : 'none';
         }
 
         updateCharCount();
@@ -1698,7 +1800,7 @@
         cueMarkers: cueMarkers
       };
       if (includePosition) {
-        data.initialPosition = parseInt(positionSlider.value);
+        data.initialPosition = targetPosition;
       }
       ipcRenderer.send('send-script', data);
     }
@@ -1759,12 +1861,12 @@
       // When starting playback, auto-switch to monitor view and open display
       if (!isPlaying) {
         console.log('📺 Opening monitor view and display');
-        // Switch to monitor view
-        viewMonitorBtn.classList.add('active');
-        viewEditorBtn.classList.remove('active');
-        monitorView.classList.add('active');
-        editorView.classList.remove('active');
-        updateMonitorScale();
+        // Use the actual button click so highlight-scroll logic runs
+        // (saves editor selection, scrolls to highlight, updates targetPosition)
+        viewMonitorBtn.click();
+
+        // Wait a frame for the highlight-scroll rAF to update targetPosition
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
         // Open display only if not already open
         const isOpen = await ipcRenderer.invoke('is-teleprompter-open');
@@ -1782,7 +1884,8 @@
       if (!isPlaying && countdownCheckbox.checked) {
         console.log('⏱️ Starting with countdown enabled');
         // Send current position to teleprompter BEFORE countdown starts
-        sendPlaybackState(true);
+        positionDirty = true;
+        sendPlaybackState();
         // Start countdown on both teleprompter and monitor preview
         const seconds = parseInt(countdownSeconds.value);
         ipcRenderer.send('start-countdown', seconds);
@@ -1801,12 +1904,14 @@
         if (!isPlaying) {
           console.log('⏸️ Paused - adding playback stopped marker');
           cancelMonitorCountdown();
+          // Don't stopAnimation() — the loop self-stops when converged,
+          // and keeping it alive avoids a stale-start jump on resume
           // Add automatic "Playback Stopped" marker for video editing
           if (isRecording) {
             addProblemMarker('playback-stopped', '⏸️ Playback Stopped');
           }
           // Send pause without position - teleprompter stops where it is
-          sendPlaybackState(false);
+          sendPlaybackState();
         } else {
           console.log('▶️ Started playing');
           // Add automatic "Playback Started" marker if recording
@@ -1814,8 +1919,11 @@
             console.log('🎬 Adding auto playback started marker');
             addProblemMarker('playback-started', '▶️ Playback Started');
           }
-          // Include position when starting so playback continues from current spot
-          sendPlaybackState(true);
+          // Pre-start animation loop so it's ready to interpolate the first
+          // teleprompter position update smoothly (avoids jump on resume)
+          ensureAnimationRunning();
+          // Resume playback — position only sent if user explicitly changed it
+          sendPlaybackState();
         }
         updatePlayButton();
       }
@@ -1842,69 +1950,91 @@
     });
 
 
-    function sendPlaybackState(includePosition = false) {
+    function sendPlaybackState() {
       const state = {
         isPlaying: isPlaying,
         speed: parseInt(speedSlider.value)
       };
-      if (includePosition) {
-        state.position = parseInt(positionSlider.value);
-        // Also update monitor preview immediately
-        applyMonitorPosition(state.position);
-        monitorProgressBar.style.width = state.position + '%';
-        monitorPercent.textContent = Math.round(state.position) + '%';
+      if (positionDirty) {
+        state.position = targetPosition;
+        positionDirty = false;
       }
       ipcRenderer.send('playback-control', state);
+    }
+
+    function sendPositionUpdate() {
+      positionDirty = true;
+      sendPlaybackState();
     }
 
     // Speed control - don't include position to avoid jumping
     speedSlider.addEventListener('input', () => {
       speedValueHeader.textContent = speedSlider.value;
-      sendPlaybackState(false);
+      sendPlaybackState();
     });
 
     const findTextInput = document.getElementById('findTextInput');
 
     // Position control - update display and send to teleprompter
     positionSlider.addEventListener('input', () => {
-      if (positionValueHeader) positionValueHeader.textContent = positionSlider.value + '%';
-      sendPlaybackState(true);
+      const val = parseFloat(positionSlider.value);
+      targetPosition = val;
+      displayPosition = val;  // Instant — user is dragging
+      updatePositionUI(val);
+      claimOperatorAuthority();
+      sendPositionUpdate();
     });
 
     document.getElementById('jumpStartBtn').addEventListener('click', () => {
-      positionSlider.value = 0;
-      if (positionValueHeader) positionValueHeader.textContent = '0%';
-      sendPlaybackState(true);
+      targetPosition = 0;
+      displayPosition = 0;
+      updatePositionUI(0);
+      sendPositionUpdate();
     });
 
     document.getElementById('jumpEndBtn').addEventListener('click', () => {
-      positionSlider.value = 100;
-      if (positionValueHeader) positionValueHeader.textContent = '100%';
-      sendPlaybackState(true);
+      targetPosition = 100;
+      displayPosition = 100;
+      updatePositionUI(100);
+      sendPositionUpdate();
     });
+
+    // Pixel-based position calculation using monitor word spans
+    // Matches the teleprompter's own formula for accurate jump positioning
+    function calculatePixelPercent(charPosition) {
+      updateMonitorText();
+      const words = monitorScriptText.querySelectorAll('.monitor-word[data-char-index]');
+      let targetWord = null;
+      for (const word of words) {
+        const charIdx = parseInt(word.dataset.charIndex);
+        if (charIdx >= charPosition) { targetWord = word; break; }
+        targetWord = word;
+      }
+      if (!targetWord) return 0;
+
+      const containerHeight = teleprompterDimensions.height;
+      const textHeight = monitorScriptWrapper.scrollHeight;
+      const startY = containerHeight * 0.5;
+      const endY = -textHeight + (containerHeight * 0.5);
+      const range = startY - endY;
+      const wordTop = targetWord.offsetTop;
+      const targetY = startY - wordTop;
+      return range > 0
+        ? Math.min(100, Math.max(0, ((startY - targetY) / range) * 100))
+        : 0;
+    }
 
     // Jump to cursor position in editor
     const jumpCursorBtn = document.getElementById('jumpCursorBtn');
     if (jumpCursorBtn) jumpCursorBtn.addEventListener('click', () => {
       const cursorPos = scriptText.selectionStart;
-      const totalChars = scriptText.value.length;
-      if (totalChars > 0) {
-        // Calculate percentage based on line position for better accuracy
-        const textBefore = scriptText.value.substring(0, cursorPos);
-        const linesBefore = textBefore.split('\n').length;
-        const totalLines = scriptText.value.split('\n').length;
-        const percent = Math.min(100, Math.max(0, Math.round((linesBefore / totalLines) * 100)));
+      if (scriptText.value.length > 0) {
+        const percent = calculatePixelPercent(cursorPos);
 
-        positionSlider.value = percent;
-        if (positionValueHeader) positionValueHeader.textContent = percent + '%';
-
-        // Also update monitor position
         targetPosition = percent;
-        applyMonitorPosition(percent);
-        monitorProgressBar.style.width = percent + '%';
-        monitorPercent.textContent = percent + '%';
-
-        sendPlaybackState(true);
+        displayPosition = percent;
+        updatePositionUI(percent);
+        sendPositionUpdate();
       }
     });
 
@@ -1940,29 +2070,22 @@
       if (index !== -1) {
         lastFindIndex = index;
 
-        // Calculate percentage based on line position for better accuracy
-        const textBefore = scriptText.value.substring(0, index);
-        const linesBefore = textBefore.split('\n').length;
-        const totalLines = scriptText.value.split('\n').length;
-        const percent = Math.min(100, Math.max(0, Math.round((linesBefore / totalLines) * 100)));
+        // Pixel-based position calculation matching teleprompter formula
+        const percent = calculatePixelPercent(index);
 
-        // Update position slider and teleprompter
-        positionSlider.value = percent;
-        if (positionValueHeader) positionValueHeader.textContent = percent + '%';
-
-        // Also update monitor position
+        // Update position and teleprompter
         targetPosition = percent;
-        applyMonitorPosition(percent);
-        monitorProgressBar.style.width = percent + '%';
-        monitorPercent.textContent = percent + '%';
-
-        sendPlaybackState(true);
+        displayPosition = percent;
+        updatePositionUI(percent);
+        sendPositionUpdate();
 
         // Highlight in editor and scroll to it
         scriptText.focus();
         scriptText.setSelectionRange(index, index + searchText.length);
 
         // Scroll textarea to show the selected text
+        const textBefore = scriptText.value.substring(0, index);
+        const linesBefore = textBefore.split('\n').length;
         const lineHeight = parseInt(window.getComputedStyle(scriptText).lineHeight) || 24;
         const targetScroll = (linesBefore - 3) * lineHeight;
         scriptText.scrollTop = Math.max(0, targetScroll);
@@ -2034,6 +2157,13 @@
     });
     // Initialize countdown row visibility
     countdownRow.style.display = countdownCheckbox.checked ? 'flex' : 'none';
+
+    // Toggle recording countdown seconds visibility based on checkbox
+    recordingCountdownCheckbox.addEventListener('change', () => {
+      recordingCountdownRow.style.display = recordingCountdownCheckbox.checked ? 'flex' : 'none';
+    });
+    // Initialize recording countdown row visibility
+    recordingCountdownRow.style.display = recordingCountdownCheckbox.checked ? 'flex' : 'none';
 
     // Script text change
     scriptText.addEventListener('input', () => {
@@ -2208,9 +2338,10 @@
 
     // Handle position change from remote control
     ipcRenderer.on('remote-position', (event, position) => {
-      positionSlider.value = position;
-      if (positionValueHeader) positionValueHeader.textContent = Math.round(position) + '%';
-      sendPlaybackState(true);
+      targetPosition = position;
+      displayPosition = position;
+      updatePositionUI(position);
+      sendPositionUpdate();
     });
 
     // Remote Control
@@ -2235,6 +2366,21 @@
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
       console.log('🎹 Keydown:', e.code, 'Target:', e.target.tagName, 'ID:', e.target.id);
+
+      // Escape key cancels recording countdown (works even in inputs/modals)
+      if (e.code === 'Escape' && recordingCountdownInterval) {
+        console.log('   ✅ Escape - cancelling recording countdown');
+        e.preventDefault();
+        cancelRecordingCountdown();
+        return;
+      }
+
+      // Skip ALL shortcuts during recording countdown (except escape above)
+      if (recordingCountdownInterval) {
+        console.log('   Skipping shortcuts - recording countdown active');
+        e.preventDefault();
+        return;
+      }
 
       // Determine element types
       const isInModal = e.target.closest('.modal') || e.target.closest('.modal-overlay');
@@ -2317,55 +2463,25 @@
 
 
     // Smooth scroll in monitor viewport to change position
-    // Initialize position from slider (variables declared at top of file)
-    targetPosition = parseFloat(positionSlider.value) || 0;
-    currentDisplayPosition = targetPosition;
-
-    function animateScroll() {
-      const diff = targetPosition - currentDisplayPosition;
-      if (Math.abs(diff) < 0.01) {
-        // Close enough, snap to target
-        currentDisplayPosition = targetPosition;
-        scrollAnimationId = null;
-      } else {
-        // Ease toward target (0.15 = smoothing factor, lower = smoother)
-        currentDisplayPosition += diff * 0.15;
-        scrollAnimationId = requestAnimationFrame(animateScroll);
-      }
-
-      // Update display
-      const displayPos = Math.min(100, Math.max(0, currentDisplayPosition));
-      positionSlider.value = displayPos;
-      if (positionValueHeader) positionValueHeader.textContent = Math.round(displayPos) + '%';
-      applyMonitorPosition(displayPos);
-      monitorProgressBar.style.width = displayPos + '%';
-      monitorPercent.textContent = Math.round(displayPos) + '%';
-    }
-
     monitorContainer.addEventListener('wheel', (e) => {
       e.preventDefault();
       e.stopPropagation();
-
-      // Skip if no actual scroll movement
       if (e.deltaY === 0) return;
 
-      // Accumulate scroll input toward target position
-      // Lower sensitivity = less touchy scrolling
+      claimOperatorAuthority();
+
       const sensitivity = 0.03;
       const maxDelta = 1.5;
       const rawDelta = e.deltaY * sensitivity;
       const delta = Math.sign(rawDelta) * Math.min(Math.abs(rawDelta), maxDelta);
       targetPosition = Math.min(100, Math.max(0, targetPosition + delta));
 
-      // Start animation if not already running
-      if (!scrollAnimationId) {
-        scrollAnimationId = requestAnimationFrame(animateScroll);
-      }
+      ensureAnimationRunning();
 
       // Debounce sending to teleprompter
       clearTimeout(monitorContainer.scrollTimeout);
       monitorContainer.scrollTimeout = setTimeout(() => {
-        sendPlaybackState(true);
+        sendPositionUpdate();
       }, 100);
     }, { passive: false });
 

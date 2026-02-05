@@ -2679,7 +2679,6 @@ button:focus-visible {
       width: 100%;
       padding: 10% 15%;
       will-change: transform;
-      transition: transform 80ms linear;
     }
 
     .monitor-preview .script-text {

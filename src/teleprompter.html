@@ -332,9 +332,9 @@
 
         scriptWrapper.style.transform = `translate3d(0, ${currentPosition}px, 0)`;
 
-        // Send position update to operator every 5 frames (~12 times per second)
+        // Send position update to operator every 2 frames (~30 times per second)
         frameCount++;
-        if (frameCount % 5 === 0) {
+        if (frameCount % 2 === 0) {
           const range = startY - endY;
           const percent = ((startY - currentPosition) / range) * 100;
           ipcRenderer.send('position-update', {
@@ -471,7 +471,16 @@
       scrollSpeed = state.speed;
 
       if (state.position !== undefined) {
-        updatePosition(state.position);
+        // Skip micro-jumps caused by float drift — only jump if position changed meaningfully
+        const containerHeight = container.clientHeight;
+        const startY = containerHeight * 0.5;
+        const endY = -scriptWrapper.scrollHeight + (containerHeight * 0.5);
+        const range = startY - endY;
+        const currentPercent = range > 0 ? ((startY - currentPosition) / range) * 100 : 0;
+
+        if (Math.abs(state.position - currentPercent) > 0.5) {
+          updatePosition(state.position);
+        }
       }
 
       if (state.isPlaying !== isPlaying) {
@@ -616,6 +625,16 @@
       stopFollowMode();
       // Direct position update for cue markers
       updatePosition(percent);
+    });
+
+    // Voice follow - smooth continuous position tracking from speech recognition
+    ipcRenderer.on('voice-follow-position', (event, percent) => {
+      setFollowTarget(percent);
+    });
+
+    // Stop voice follow mode
+    ipcRenderer.on('voice-follow-stop', () => {
+      stopFollowMode();
     });
 
     // Track highlight range
