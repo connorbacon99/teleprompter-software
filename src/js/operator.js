@@ -1598,7 +1598,7 @@
       updateMonitorText();
       updateMonitorScale();
       // Preserve current position instead of resetting to 0
-      applyMonitorPosition(targetPosition);
+      updatePositionUI(targetPosition);
 
       // Sync highlight to newly opened teleprompter
       if (persistentHighlightStart !== null && persistentHighlightEnd !== null) {
@@ -1861,12 +1861,13 @@
       // When starting playback, auto-switch to monitor view and open display
       if (!isPlaying) {
         console.log('📺 Opening monitor view and display');
-        // Use the actual button click so highlight-scroll logic runs
-        // (saves editor selection, scrolls to highlight, updates targetPosition)
-        viewMonitorBtn.click();
-
-        // Wait a frame for the highlight-scroll rAF to update targetPosition
-        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        // Only switch to monitor view if not already there — avoid re-triggering
+        // highlight scroll which would snap position back to the highlighted text
+        if (!monitorView.classList.contains('active')) {
+          viewMonitorBtn.click();
+          // Wait a frame for the highlight-scroll rAF to update targetPosition
+          await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        }
 
         // Open display only if not already open
         const isOpen = await ipcRenderer.invoke('is-teleprompter-open');
@@ -1874,17 +1875,22 @@
           const displayId = displaySelect.value ? parseInt(displaySelect.value) : null;
           currentDisplayId = await ipcRenderer.invoke('open-teleprompter', displayId);
           // Wait for teleprompter window to be ready before sending script with position
+          // teleprompter-opened will recalculate position with actual display dimensions
           setTimeout(() => {
             sendScript(true);
             sendSettings();
           }, 500);
+          // Don't send stale position before teleprompter has text —
+          // sendScript(true) handles initial position, teleprompter-opened recalculates it
+          positionDirty = false;
         }
       }
 
       if (!isPlaying && countdownCheckbox.checked) {
         console.log('⏱️ Starting with countdown enabled');
         // Send current position to teleprompter BEFORE countdown starts
-        positionDirty = true;
+        // (positionDirty may already be true if teleprompter was already open;
+        //  if first-opening, it was cleared above and sendScript(true) handles initial position)
         sendPlaybackState();
         // Start countdown on both teleprompter and monitor preview
         const seconds = parseInt(countdownSeconds.value);
