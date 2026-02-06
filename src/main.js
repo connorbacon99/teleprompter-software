@@ -149,6 +149,7 @@ function createTeleprompterWindow(displayId) {
     height: height,
     fullscreen: true,
     frame: false,
+    show: false,  // Don't show until ready — prevents focus steal
     alwaysOnTop: true,  // Keep teleprompter visible even when other apps are focused
     title: 'Teleprompter Display',
     webPreferences: {
@@ -162,18 +163,15 @@ function createTeleprompterWindow(displayId) {
 
   // Notify operator when teleprompter is ready with display dimensions
   teleprompterWindow.webContents.on('did-finish-load', () => {
+    // Show teleprompter without stealing focus from operator window
+    if (teleprompterWindow) {
+      teleprompterWindow.showInactive();
+    }
     if (operatorWindow) {
       operatorWindow.webContents.send('teleprompter-opened', {
         width: width,
         height: height
       });
-      // Return focus to operator window after a short delay so user can control playback
-      setTimeout(() => {
-        if (operatorWindow) {
-          operatorWindow.focus();
-          operatorWindow.webContents.focus();
-        }
-      }, 300);
     }
   });
 
@@ -676,9 +674,9 @@ ipcMain.handle('is-teleprompter-open', () => {
 
 // Open teleprompter on specific display
 ipcMain.handle('open-teleprompter', (event, displayId) => {
-  // If teleprompter is already open, just focus it and return current display
+  // If teleprompter is already open, just return — don't focus it or it steals
+  // focus from the operator window and the user loses keyboard control
   if (teleprompterWindow) {
-    teleprompterWindow.focus();
     return displayId;
   }
   return createTeleprompterWindow(displayId);

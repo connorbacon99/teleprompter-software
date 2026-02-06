@@ -8,6 +8,7 @@ const countdownOverlay = document.getElementById('countdownOverlay');
 const countdownNumber = document.getElementById('countdownNumber');
 
 let isPlaying = false;
+let isCountingDown = false;  // Guard: true while countdown overlay is visible
 let scrollSpeed = 30;
 let currentPosition = 0;
 let scrollAnimationId = null;
@@ -23,8 +24,18 @@ function calculateScrollHeight() {
   return totalScrollHeight;
 }
 
-// Update scroll position
-function updatePosition(percent) {
+// Get current reading position as a percentage (0-100)
+function getCurrentPercentFromPosition() {
+  const containerHeight = container.clientHeight;
+  const startY = containerHeight * 0.5;
+  const endY = -scriptWrapper.scrollHeight + (containerHeight * 0.5);
+  const range = startY - endY;
+  if (range <= 0) return 0;
+  return Math.min(100, Math.max(0, ((startY - currentPosition) / range) * 100));
+}
+
+// Apply a percentage position (0-100) — converts to pixels and updates transform
+function applyPercentPosition(percent) {
   calculateScrollHeight();
   const containerHeight = container.clientHeight;
   const startY = containerHeight * 0.5;
@@ -33,6 +44,12 @@ function updatePosition(percent) {
 
   currentPosition = startY - (range * (percent / 100));
   scriptWrapper.style.transform = `translate3d(0, ${currentPosition}px, 0)`;
+}
+
+// Update scroll position (alias used by playback-update handler)
+function updatePosition(percent) {
+  calculateScrollHeight();
+  applyPercentPosition(percent);
 }
 
 // Start scrolling using requestAnimationFrame for smooth, display-synced animation
@@ -121,6 +138,7 @@ function showStatus(text) {
 
 // Run countdown
 function runCountdown(seconds, callback) {
+  isCountingDown = true;
   let count = seconds;
   countdownNumber.textContent = count;
   countdownNumber.className = 'countdown-number';
@@ -137,7 +155,9 @@ function runCountdown(seconds, callback) {
       countdownOverlay.querySelector('.countdown-text').textContent = '';
     } else {
       clearInterval(countdownInterval);
+      countdownInterval = null;
       countdownOverlay.classList.remove('visible');
+      isCountingDown = false;
       if (callback) callback();
     }
   }, 1000);
@@ -149,19 +169,15 @@ function cancelCountdown() {
     clearInterval(countdownInterval);
     countdownInterval = null;
   }
+  isCountingDown = false;
   countdownOverlay.classList.remove('visible');
 }
 
 // Receive script from operator
 let hasLoadedScript = false;
 ipcRenderer.on('update-script', (event, data) => {
-  // Calculate current position percentage before updating
-  const containerHeight = container.clientHeight;
-  const oldScrollHeight = calculateScrollHeight();
-  const startY = containerHeight * 0.5;
-  const endY = startY - oldScrollHeight;
-  const range = startY - endY;
-  const currentPercent = range > 0 ? ((startY - currentPosition) / range) * 100 : 0;
+  // Capture current reading position as percentage before text changes
+  const currentPercent = getCurrentPercentFromPosition();
 
   // Update script text with word wrapping for highlight support
   const text = data.text || 'No script loaded';
@@ -172,26 +188,21 @@ ipcRenderer.on('update-script', (event, data) => {
     applyHighlight();
   }
 
-  // Recalculate scroll height with new content
-  const newScrollHeight = calculateScrollHeight();
-  const newEndY = startY - newScrollHeight;
-  const newRange = startY - newEndY;
+  // Recalculate with new content
+  calculateScrollHeight();
 
   // Use initial position if provided (when opening display), otherwise preserve or reset
   if (data.initialPosition !== undefined) {
-    // Jump directly to the specified position
-    currentPosition = startY - (data.initialPosition / 100) * newRange;
+    applyPercentPosition(data.initialPosition);
     hasLoadedScript = true;
   } else if (!hasLoadedScript) {
     // First load without position - start at beginning
-    currentPosition = containerHeight * 0.5;
+    applyPercentPosition(0);
     hasLoadedScript = true;
   } else {
     // Script edit - preserve same percentage position
-    currentPosition = startY - (currentPercent / 100) * newRange;
+    applyPercentPosition(currentPercent);
   }
-
-  scriptWrapper.style.transform = `translate3d(0, ${currentPosition}px, 0)`;
 });
 
 // Receive countdown command
@@ -215,9 +226,7 @@ ipcRenderer.on('playback-update', (event, state) => {
       cancelAnimationFrame(scrollAnimationId);
       scrollAnimationId = null;
     }
-    const containerHeight = container.clientHeight;
-    currentPosition = containerHeight * 0.5;
-    scriptWrapper.style.transform = `translate3d(0, ${currentPosition}px, 0)`;
+    applyPercentPosition(0);
     isPlaying = false;
     showStatus('RESET');
     return;
@@ -227,16 +236,15 @@ ipcRenderer.on('playback-update', (event, state) => {
 
   if (state.position !== undefined) {
     // Skip micro-jumps caused by float drift — only jump if position changed meaningfully
-    const containerHeight = container.clientHeight;
-    const startY = containerHeight * 0.5;
-    const endY = -scriptWrapper.scrollHeight + (containerHeight * 0.5);
-    const range = startY - endY;
-    const currentPercent = range > 0 ? ((startY - currentPosition) / range) * 100 : 0;
-
+    const currentPercent = getCurrentPercentFromPosition();
     if (Math.abs(state.position - currentPercent) > 0.5) {
       updatePosition(state.position);
     }
   }
+
+  // During countdown, accept speed/position updates but do NOT change play state.
+  // The countdown callback handles starting playback when it completes.
+  if (isCountingDown) return;
 
   if (state.isPlaying !== isPlaying) {
     isPlaying = state.isPlaying;
@@ -265,6 +273,9 @@ ipcRenderer.on('speed-only-update', (event, data) => {
 
 // Receive settings from operator
 ipcRenderer.on('settings-update', (event, settings) => {
+  // Capture current reading position as percentage BEFORE layout changes
+  const currentPercent = getCurrentPercentFromPosition();
+
   scriptText.style.fontSize = settings.fontSize + 'px';
   scriptText.style.color = settings.textColor;
 
@@ -284,13 +295,14 @@ ipcRenderer.on('settings-update', (event, settings) => {
   }
   container.style.transform = transform;
 
-  calculateScrollHeight();
+  // Restore reading position — font/layout changes alter scrollHeight,
+  // so the same pixel position maps to a different percentage. Recalculate
+  // pixel position from the saved percentage to keep the same text in view.
+  applyPercentPosition(currentPercent);
 
   // After settings change (especially font size), recalculate follow position
-  // This prevents voice follow from breaking when text layout changes
   if (followActive) {
-    // Update current percent based on new scroll height
-    followCurrentPercent = getCurrentPercentFromPosition();
+    followCurrentPercent = currentPercent;
   }
 });
 
@@ -304,27 +316,6 @@ let followAnimationFrame = null;
 // 0.15 means move 15% of the remaining distance each frame
 // At 60fps: reaches 95% of target in ~0.3sec - very responsive for instructors
 const FOLLOW_SMOOTHING = 0.15;
-
-function getCurrentPercentFromPosition() {
-  calculateScrollHeight();
-  const containerHeight = container.clientHeight;
-  const startY = containerHeight * 0.5;
-  const endY = -scriptWrapper.scrollHeight + (containerHeight * 0.5);
-  const range = startY - endY;
-  if (range === 0) return 0;
-  return ((startY - currentPosition) / range) * 100;
-}
-
-function applyPercentPosition(percent) {
-  calculateScrollHeight();
-  const containerHeight = container.clientHeight;
-  const startY = containerHeight * 0.5;
-  const endY = -scriptWrapper.scrollHeight + (containerHeight * 0.5);
-  const range = startY - endY;
-
-  currentPosition = startY - (range * (percent / 100));
-  scriptWrapper.style.transform = `translate3d(0, ${currentPosition}px, 0)`;
-}
 
 function runFollowLoop() {
   if (!followActive) {
@@ -498,16 +489,18 @@ function wrapTextForHighlighting(text) {
   return html;
 }
 
-// Initialize
+// Initialize — preserve reading position across resize (e.g., fullscreen transition)
 window.addEventListener('resize', () => {
+  const currentPercent = getCurrentPercentFromPosition();
   calculateScrollHeight();
+  applyPercentPosition(currentPercent);
 });
 
-setTimeout(() => {
-  const containerHeight = container.clientHeight;
-  currentPosition = containerHeight * 0.5;
-  scriptWrapper.style.transform = `translate3d(0, ${currentPosition}px, 0)`;
-}, 100);
+// Set initial position at top of text (0%)
+// Use requestAnimationFrame to ensure layout is complete after fullscreen transition
+requestAnimationFrame(() => {
+  applyPercentPosition(0);
+});
 
 document.addEventListener('contextmenu', e => e.preventDefault());
 

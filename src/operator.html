@@ -168,6 +168,11 @@
         </div>
         <div class="script-monitor" id="monitorView">
           <div class="monitor-container" id="monitorContainer">
+            <!-- Retake Mode Banner -->
+            <div class="retake-mode-banner" id="retakeModeBanner">
+              <span>Select where to retake from</span>
+              <button class="btn btn-sm" id="retakeModeCancelBtn">Cancel</button>
+            </div>
             <!-- Scaled clone of teleprompter - renders at teleprompter size then scaled down -->
             <div class="monitor-preview-frame">
               <div class="monitor-preview" id="monitorPreview">
@@ -452,18 +457,6 @@
     </div>
   </div>
 
-  <!-- Retake Marker Modal -->
-  <div class="modal-overlay" id="retakeModal">
-    <div class="modal">
-      <h3>Mark Retake</h3>
-      <p style="color: var(--text-secondary); font-size: 13px; margin: 8px 0 12px 0;">Where should the editor go back to for the retake?</p>
-      <input type="text" id="retakeInput" placeholder="Starting at...">
-      <div class="modal-buttons">
-        <button class="btn" id="retakeCancelBtn">Cancel</button>
-        <button class="btn danger" id="retakeSaveBtn">Mark Retake</button>
-      </div>
-    </div>
-  </div>
 
   <!-- Export Guide Modal -->
   <div class="modal-overlay" id="exportModal">

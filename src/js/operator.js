@@ -75,6 +75,7 @@
     const monitorCountdownNumber = document.getElementById('monitorCountdownNumber');
 
     let isPlaying = false;
+    let isRetakeMode = false;
     let currentDisplayId = null;
     let cueMarkers = [];
     let currentProjectPath = null;
@@ -91,6 +92,10 @@
     let animFrameId = null;          // Single rAF id for the unified loop
     let operatorAuthorityUntil = 0;  // timestamp — operator controls position until this time
     let positionDirty = false;        // true when user explicitly changed position — cleared after send
+
+    // Pending teleprompter initialization — set when opening teleprompter,
+    // consumed by teleprompter-opened handler for reliable event-based init
+    let pendingTeleprompterInit = null;
 
     // Unified animation loop - handles both playback interpolation and wheel scroll easing
     // EASE_FACTOR and SNAP_THRESHOLD imported from constants.js
@@ -136,6 +141,15 @@
       applyMonitorPosition(clamped);
       monitorProgressBar.style.width = clamped + '%';
       monitorPercent.textContent = Math.round(clamped) + '%';
+    }
+
+    // Snap both target and display to a position instantly (no easing animation).
+    // Use after any layout change (font size, dimensions, view switch) to avoid
+    // the easing animation creating a visible jump from the old layout's position.
+    function snapPosition(percent) {
+      targetPosition = percent;
+      displayPosition = percent;
+      updatePositionUI(percent);
     }
 
     // ============================================
@@ -248,11 +262,9 @@
         renderCueList();
         sendScript();
         updateMonitorText();
-        targetPosition = 0;
-        displayPosition = 0;
+        snapPosition(0);
         positionDirty = true;
         stopAnimation();
-        updatePositionUI(0);
 
         // Update file name display
         fileName.textContent = script.name;
@@ -636,54 +648,19 @@
         }
       }
 
-      const modal = document.getElementById('retakeModal');
-      const input = document.getElementById('retakeInput');
-      const saveBtn = document.getElementById('retakeSaveBtn');
-      const cancelBtn = document.getElementById('retakeCancelBtn');
+      // Enter retake mode - user will highlight text in monitor view
+      isRetakeMode = true;
+      monitorContainer.classList.add('retake-mode');
 
-      input.value = '';
-      modal.classList.add('visible');
-      setTimeout(() => {
-        input.focus();
-      }, 50);
+      // Auto-switch to monitor view if in editor view
+      if (!monitorView.classList.contains('active')) {
+        viewMonitorBtn.click();
+      }
+    }
 
-      const handleSave = () => {
-        const startingAt = input.value.trim();
-        if (startingAt) {
-          createMarker('retake', `Starting at: ${startingAt}`, null);
-        } else {
-          // If no starting point provided, just mark as retake without location
-          createMarker('retake', 'Retake needed', null);
-        }
-        modal.classList.remove('visible');
-        cleanup();
-      };
-
-      const handleCancel = () => {
-        modal.classList.remove('visible');
-        cleanup();
-      };
-
-      const cleanup = () => {
-        saveBtn.removeEventListener('click', handleSave);
-        cancelBtn.removeEventListener('click', handleCancel);
-        input.removeEventListener('keydown', handleKeyDown);
-        modal.removeEventListener('click', handleOverlayClick);
-      };
-
-      const handleKeyDown = (e) => {
-        if (e.key === 'Enter') handleSave();
-        else if (e.key === 'Escape') handleCancel();
-      };
-
-      const handleOverlayClick = (e) => {
-        if (e.target === modal) handleCancel();
-      };
-
-      saveBtn.addEventListener('click', handleSave);
-      cancelBtn.addEventListener('click', handleCancel);
-      input.addEventListener('keydown', handleKeyDown);
-      modal.addEventListener('click', handleOverlayClick);
+    function cancelRetakeMode() {
+      isRetakeMode = false;
+      monitorContainer.classList.remove('retake-mode');
     }
 
     function showMarkerFeedback(type) {
@@ -707,6 +684,12 @@
     }
     if (recordingMarkerNote) {
       recordingMarkerNote.addEventListener('click', () => addProblemMarker('note'));
+    }
+
+    // Retake mode cancel button
+    const retakeModeCancelBtn = document.getElementById('retakeModeCancelBtn');
+    if (retakeModeCancelBtn) {
+      retakeModeCancelBtn.addEventListener('click', () => cancelRetakeMode());
     }
 
     // ============================================
@@ -1374,7 +1357,8 @@
       const hasSelection = selectionStart !== selectionEnd;
 
       // Store selection as persistent highlight if there is one
-      if (hasSelection) {
+      // Skip in retake mode - don't override position with editor selection
+      if (hasSelection && !isRetakeMode) {
         persistentHighlightStart = selectionStart;
         persistentHighlightEnd = selectionEnd;
         // Sync to teleprompter
@@ -1389,7 +1373,8 @@
       updateMonitorScale();
 
       // Scroll to the highlighted text if there was a selection
-      if (hasSelection) {
+      // Skip position jumping in retake mode - keep current scroll position
+      if (hasSelection && !isRetakeMode) {
         requestAnimationFrame(() => {
           // Find first highlighted element to scroll to
           const firstHighlighted = monitorScriptText.querySelector('.editor-highlight-wrapper, .editor-highlight');
@@ -1401,18 +1386,14 @@
             const startY = containerHeight * 0.5;
             const endY = -textHeight + (containerHeight * 0.5);
             const range = startY - endY;
-            // offsetTop is relative to the script-wrapper, which has 10% padding
             const wordTop = firstHighlighted.offsetTop;
             const targetY = startY - wordTop;
             const percent = range > 0
               ? Math.min(100, Math.max(0, ((startY - targetY) / range) * 100))
               : 0;
 
-            // Update position and apply
-            targetPosition = percent;
-            displayPosition = percent;
+            snapPosition(percent);
             positionDirty = true;
-            updatePositionUI(percent);
           }
         });
       }
@@ -1602,8 +1583,33 @@
       }
       updateMonitorText();
       updateMonitorScale();
-      // Preserve current position instead of resetting to 0
-      updatePositionUI(targetPosition);
+      // Snap position — dimensions changed so text layout is different
+      snapPosition(targetPosition);
+
+      // Complete pending teleprompter initialization (replaces fragile setTimeout)
+      if (pendingTeleprompterInit) {
+        const init = pendingTeleprompterInit;
+        pendingTeleprompterInit = null;
+
+        // Send script with initial position
+        const data = {
+          text: scriptText.value,
+          cueMarkers: cueMarkers,
+          initialPosition: init.initialPosition
+        };
+        ipcRenderer.send('send-script', data);
+        sendSettings();
+
+        if (init.countdown) {
+          // Start teleprompter countdown — script is loaded, safe to scroll when done
+          ipcRenderer.send('start-countdown', init.countdownSeconds);
+          // Start monitor countdown in sync
+          runMonitorCountdown(init.countdownSeconds);
+        } else {
+          // No countdown — start playback directly
+          sendPlaybackState();
+        }
+      }
 
       // Sync highlight to newly opened teleprompter
       if (persistentHighlightStart !== null && persistentHighlightEnd !== null) {
@@ -1611,10 +1617,11 @@
       }
     });
 
-    // Handle window resize
+    // Handle window resize — preserve reading position
     window.addEventListener('resize', () => {
       if (monitorView.classList.contains('active')) {
         updateMonitorScale();
+        snapPosition(targetPosition);
       }
     });
 
@@ -1712,11 +1719,9 @@
             renderCueList();
             sendScript();
             updateMonitorText();
-            targetPosition = 0;
-            displayPosition = 0;
+            snapPosition(0);
             positionDirty = true;
             stopAnimation();
-            updatePositionUI(0);
           } else {
             alert('Error reading file: ' + result.error);
           }
@@ -1814,11 +1819,12 @@
     document.getElementById('openDisplayBtn').addEventListener('click', async () => {
       const displayId = displaySelect.value ? parseInt(displaySelect.value) : null;
       currentDisplayId = await ipcRenderer.invoke('open-teleprompter', displayId);
-      setTimeout(() => {
-        // Include initial position so display starts where monitor preview is
-        sendScript(true);
-        sendSettings();
-      }, 500);
+      // Defer script/settings send to teleprompter-opened handler (event-based, not setTimeout)
+      pendingTeleprompterInit = {
+        initialPosition: targetPosition,
+        countdown: false,
+        countdownSeconds: 0
+      };
     });
 
     // Close teleprompter display
@@ -1863,17 +1869,14 @@
     });
 
     async function handlePlayToggle() {
-      // Track whether we're opening the teleprompter for the first time in this play action
+      // Track whether we're opening the teleprompter for the first time
       let openingTeleprompter = false;
 
       // When starting playback, auto-switch to monitor view and open display
       if (!isPlaying) {
         console.log('📺 Opening monitor view and display');
-        // Only switch to monitor view if not already there — avoid re-triggering
-        // highlight scroll which would snap position back to the highlighted text
         if (!monitorView.classList.contains('active')) {
           viewMonitorBtn.click();
-          // Wait a frame for the highlight-scroll rAF to update targetPosition
           await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
         }
 
@@ -1883,64 +1886,48 @@
           openingTeleprompter = true;
           const displayId = displaySelect.value ? parseInt(displaySelect.value) : null;
           currentDisplayId = await ipcRenderer.invoke('open-teleprompter', displayId);
-          // Capture position NOW — teleprompter position feedback will overwrite
-          // targetPosition before the setTimeout fires (race condition)
-          const savedInitialPosition = targetPosition;
-          // Wait for teleprompter window to be ready, then send script AND playback state
-          // together so the teleprompter has content before it starts scrolling
-          setTimeout(() => {
-            const data = {
-              text: scriptText.value,
-              cueMarkers: cueMarkers,
-              initialPosition: savedInitialPosition
-            };
-            ipcRenderer.send('send-script', data);
-            sendSettings();
-            // Now send playback state AFTER script — teleprompter needs content
-            // before startScrolling() or it will immediately hit endY and stop
-            sendPlaybackState();
-          }, 500);
-          // Don't send stale position before teleprompter has text
+
+          // Store pending init — teleprompter-opened handler will send script,
+          // settings, and countdown/playback when the window is actually ready.
+          // This replaces the fragile 500ms setTimeout.
+          pendingTeleprompterInit = {
+            initialPosition: targetPosition,
+            countdown: countdownCheckbox.checked,
+            countdownSeconds: parseInt(countdownSeconds.value)
+          };
           positionDirty = false;
         }
       }
 
       if (!isPlaying && countdownCheckbox.checked) {
-        console.log('⏱️ Starting with countdown enabled');
-        // Send current position to teleprompter BEFORE countdown starts
-        // (positionDirty may already be true if teleprompter was already open;
-        //  if first-opening, it was cleared above and sendScript(true) handles initial position)
-        if (!openingTeleprompter) sendPlaybackState();
-        // Start countdown on both teleprompter and monitor preview
-        const seconds = parseInt(countdownSeconds.value);
-        ipcRenderer.send('start-countdown', seconds);
-        runMonitorCountdown(seconds);
+        // Countdown path
+        if (!openingTeleprompter) {
+          // Teleprompter already open — sync position and start countdown now
+          sendPlaybackState();
+          const seconds = parseInt(countdownSeconds.value);
+          ipcRenderer.send('start-countdown', seconds);
+          runMonitorCountdown(seconds);
+        }
+        // When opening, countdown is deferred to teleprompter-opened handler
         isPlaying = true;
         updatePlayButton();
-        // Add automatic "Playback Started" marker if recording
         if (isRecording) {
           addProblemMarker('playback-started', '▶️ Playback Started');
         }
       } else {
+        // No countdown path (toggle play/pause)
         isPlaying = !isPlaying;
         if (!isPlaying) {
           cancelMonitorCountdown();
-          // Add automatic "Playback Stopped" marker for video editing
           if (isRecording) {
             addProblemMarker('playback-stopped', '⏸️ Playback Stopped');
           }
-          // Send pause without position - teleprompter stops where it is
           sendPlaybackState();
         } else {
-          // Add automatic "Playback Started" marker if recording
           if (isRecording) {
             addProblemMarker('playback-started', '▶️ Playback Started');
           }
-          // Pre-start animation loop so it's ready to interpolate the first
-          // teleprompter position update smoothly (avoids jump on resume)
           ensureAnimationRunning();
-          // Send playback state — but NOT if we're opening the teleprompter,
-          // because in that case it's deferred to the setTimeout above
           if (!openingTeleprompter) sendPlaybackState();
         }
         updatePlayButton();
@@ -1996,24 +1983,18 @@
     // Position control - update display and send to teleprompter
     positionSlider.addEventListener('input', () => {
       const val = parseFloat(positionSlider.value);
-      targetPosition = val;
-      displayPosition = val;  // Instant — user is dragging
-      updatePositionUI(val);
+      snapPosition(val);
       claimOperatorAuthority();
       sendPositionUpdate();
     });
 
     document.getElementById('jumpStartBtn').addEventListener('click', () => {
-      targetPosition = 0;
-      displayPosition = 0;
-      updatePositionUI(0);
+      snapPosition(0);
       sendPositionUpdate();
     });
 
     document.getElementById('jumpEndBtn').addEventListener('click', () => {
-      targetPosition = 100;
-      displayPosition = 100;
-      updatePositionUI(100);
+      snapPosition(100);
       sendPositionUpdate();
     });
 
@@ -2049,9 +2030,7 @@
       if (scriptText.value.length > 0) {
         const percent = calculatePixelPercent(cursorPos);
 
-        targetPosition = percent;
-        displayPosition = percent;
-        updatePositionUI(percent);
+        snapPosition(percent);
         sendPositionUpdate();
       }
     });
@@ -2092,9 +2071,7 @@
         const percent = calculatePixelPercent(index);
 
         // Update position and teleprompter
-        targetPosition = percent;
-        displayPosition = percent;
-        updatePositionUI(percent);
+        snapPosition(percent);
         sendPositionUpdate();
 
         // Highlight in editor and scroll to it
@@ -2140,13 +2117,16 @@
 
     // Update monitor preview settings to match teleprompter
     function updateMonitorSettings(settings) {
-      // Just call updateMonitorScale which handles all settings
+      // Rebuild monitor with new settings — snap position to avoid easing jump
       updateMonitorScale();
+      snapPosition(targetPosition);
+      // Ignore teleprompter position echo while it repositions to match
+      claimOperatorAuthority(500);
     }
 
     fontFamilySelect.addEventListener('change', sendSettings);
 
-    // Font size: simple approach - just preserve current percentage
+    // Font size: preserve current reading position through layout changes
     let fontSizeDebounceTimer = null;
 
     fontSizeInput.addEventListener('input', () => {
@@ -2155,10 +2135,10 @@
       // Update font size in monitor immediately for visual feedback
       monitorScriptText.style.fontSize = fontSizeInput.value + 'px';
 
-      // Re-apply current position (percentage stays same, but pixel calc updates for new text height)
-      applyMonitorPosition(targetPosition);
+      // Snap position — scrollHeight changed, same percent = different visual position
+      snapPosition(targetPosition);
 
-      // Debounce sending to teleprompter
+      // Debounce sending to teleprompter (teleprompter-side preserves its own position)
       clearTimeout(fontSizeDebounceTimer);
       fontSizeDebounceTimer = setTimeout(() => {
         sendSettings();
@@ -2262,6 +2242,12 @@
 
             // Clear browser selection so it doesn't look doubled
             selection.removeAllRanges();
+
+            // If in retake mode, create a retake marker with the selected text
+            if (isRetakeMode) {
+              createMarker('retake', `Starting at: ${selectedText.trim()}`, null);
+              cancelRetakeMode();
+            }
           }
         }
       } else {
@@ -2356,9 +2342,7 @@
 
     // Handle position change from remote control
     ipcRenderer.on('remote-position', (event, position) => {
-      targetPosition = position;
-      displayPosition = position;
-      updatePositionUI(position);
+      snapPosition(position);
       sendPositionUpdate();
     });
 
@@ -2422,7 +2406,7 @@
       if (e.code === 'Space' && isNonTextInput) {
         console.log('   Space on checkbox/slider - triggering play/pause instead');
         e.preventDefault();
-        e.target.blur(); // Remove focus from the control
+        document.body.focus(); // Move focus away from control without losing window focus
         headerPlayPauseBtn.click();
         return;
       }
@@ -2503,7 +2487,7 @@
       }, 100);
     }, { passive: false });
 
-    // Click on monitor to enable keyboard shortcuts (blur any focused inputs)
+    // Click on monitor to move focus away from inputs (so keyboard shortcuts work)
     // But NOT when editing in monitor view
     monitorContainer.addEventListener('click', (e) => {
       // Skip if in edit mode or clicking on editable text
@@ -2511,10 +2495,10 @@
       if (e.target.id === 'monitorScriptText') return;
       if (e.target.closest('#monitorScriptText')) return;
 
-      // Only blur if clicking on the container itself or its children (not buttons/controls)
+      // Move focus to the body instead of blur() — blur() can lose window focus
+      // entirely, requiring the user to click back into the app
       if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') {
-        document.activeElement.blur();
-        console.log('🎯 Monitor clicked - inputs blurred for keyboard shortcuts');
+        document.body.focus();
       }
     });
 
