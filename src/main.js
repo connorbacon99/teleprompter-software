@@ -12,8 +12,11 @@ const QRCode = require('qrcode');
 let autoUpdater = null;
 
 // Enable Web Speech API - must be set before app ready
-app.commandLine.appendSwitch('enable-speech-dispatcher');
-app.commandLine.appendSwitch('enable-features', 'WebSpeechAPI');
+// Safety check for app initialization
+if (app && app.commandLine) {
+  app.commandLine.appendSwitch('enable-speech-dispatcher');
+  app.commandLine.appendSwitch('enable-features', 'WebSpeechAPI');
+}
 
 let operatorWindow = null;
 let teleprompterWindow = null;
@@ -651,6 +654,8 @@ function getRemoteControlHTML() {
 </html>`;
 }
 
+// Register all IPC handlers - called after app is ready
+function registerIPCHandlers() {
 // Get available displays
 ipcMain.handle('get-displays', () => {
   const displays = screen.getAllDisplays();
@@ -1255,8 +1260,11 @@ ipcMain.handle('open-releases-page', () => {
   const { shell } = require('electron');
   shell.openExternal('https://github.com/connorbacon99/teleprompter-software/releases');
 });
+} // end registerIPCHandlers
 
 app.whenReady().then(async () => {
+  // Register all IPC handlers now that app is ready
+  registerIPCHandlers();
   // Set up permission handler for microphone access
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
     const allowedPermissions = ['media', 'microphone', 'audioCapture'];
