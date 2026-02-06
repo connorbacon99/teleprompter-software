@@ -4,8 +4,26 @@
  */
 
     const { ipcRenderer } = require('electron');
-    const { formatTime, formatTimeShort } = require('./utils/time-formatter');
-    const { EASE_FACTOR, SNAP_THRESHOLD, AUTOSAVE_INTERVAL, MAX_AUTOSAVES } = require('./utils/constants');
+    // Constants inlined — require() can't resolve relative paths when loaded via HTTP
+    const EASE_FACTOR = 0.35;
+    const SNAP_THRESHOLD = 0.005;
+    const AUTOSAVE_INTERVAL = 30000;
+    const MAX_AUTOSAVES = 5;
+
+    function formatTime(ms) {
+      const seconds = Math.floor(ms / 1000);
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      const secs = seconds % 60;
+      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    function formatTimeShort(ms) {
+      const seconds = Math.floor(ms / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
 
     // Elements
     const scriptText = document.getElementById('scriptText');
@@ -1845,6 +1863,9 @@
     });
 
     async function handlePlayToggle() {
+      // Track whether we're opening the teleprompter for the first time in this play action
+      let openingTeleprompter = false;
+
       // When starting playback, auto-switch to monitor view and open display
       if (!isPlaying) {
         console.log('📺 Opening monitor view and display');
@@ -1859,16 +1880,27 @@
         // Open display only if not already open
         const isOpen = await ipcRenderer.invoke('is-teleprompter-open');
         if (!isOpen) {
+          openingTeleprompter = true;
           const displayId = displaySelect.value ? parseInt(displaySelect.value) : null;
           currentDisplayId = await ipcRenderer.invoke('open-teleprompter', displayId);
-          // Wait for teleprompter window to be ready before sending script with position
-          // teleprompter-opened will recalculate position with actual display dimensions
+          // Capture position NOW — teleprompter position feedback will overwrite
+          // targetPosition before the setTimeout fires (race condition)
+          const savedInitialPosition = targetPosition;
+          // Wait for teleprompter window to be ready, then send script AND playback state
+          // together so the teleprompter has content before it starts scrolling
           setTimeout(() => {
-            sendScript(true);
+            const data = {
+              text: scriptText.value,
+              cueMarkers: cueMarkers,
+              initialPosition: savedInitialPosition
+            };
+            ipcRenderer.send('send-script', data);
             sendSettings();
+            // Now send playback state AFTER script — teleprompter needs content
+            // before startScrolling() or it will immediately hit endY and stop
+            sendPlaybackState();
           }, 500);
-          // Don't send stale position before teleprompter has text —
-          // sendScript(true) handles initial position, teleprompter-opened recalculates it
+          // Don't send stale position before teleprompter has text
           positionDirty = false;
         }
       }
@@ -1878,7 +1910,7 @@
         // Send current position to teleprompter BEFORE countdown starts
         // (positionDirty may already be true if teleprompter was already open;
         //  if first-opening, it was cleared above and sendScript(true) handles initial position)
-        sendPlaybackState();
+        if (!openingTeleprompter) sendPlaybackState();
         // Start countdown on both teleprompter and monitor preview
         const seconds = parseInt(countdownSeconds.value);
         ipcRenderer.send('start-countdown', seconds);
@@ -1887,18 +1919,12 @@
         updatePlayButton();
         // Add automatic "Playback Started" marker if recording
         if (isRecording) {
-          console.log('🎬 Adding auto playback started marker (countdown starting)');
           addProblemMarker('playback-started', '▶️ Playback Started');
         }
       } else {
-        console.log('🔄 Toggling play state. Was playing:', isPlaying);
         isPlaying = !isPlaying;
-        console.log('🔄 Now playing:', isPlaying);
         if (!isPlaying) {
-          console.log('⏸️ Paused - adding playback stopped marker');
           cancelMonitorCountdown();
-          // Don't stopAnimation() — the loop self-stops when converged,
-          // and keeping it alive avoids a stale-start jump on resume
           // Add automatic "Playback Stopped" marker for video editing
           if (isRecording) {
             addProblemMarker('playback-stopped', '⏸️ Playback Stopped');
@@ -1906,17 +1932,16 @@
           // Send pause without position - teleprompter stops where it is
           sendPlaybackState();
         } else {
-          console.log('▶️ Started playing');
           // Add automatic "Playback Started" marker if recording
           if (isRecording) {
-            console.log('🎬 Adding auto playback started marker');
             addProblemMarker('playback-started', '▶️ Playback Started');
           }
           // Pre-start animation loop so it's ready to interpolate the first
           // teleprompter position update smoothly (avoids jump on resume)
           ensureAnimationRunning();
-          // Resume playback — position only sent if user explicitly changed it
-          sendPlaybackState();
+          // Send playback state — but NOT if we're opening the teleprompter,
+          // because in that case it's deferred to the setTimeout above
+          if (!openingTeleprompter) sendPlaybackState();
         }
         updatePlayButton();
       }
