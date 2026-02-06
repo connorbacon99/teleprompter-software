@@ -4,6 +4,8 @@
  */
 
     const { ipcRenderer } = require('electron');
+    const { formatTime, formatTimeShort } = require('./utils/time-formatter');
+    const { EASE_FACTOR, SNAP_THRESHOLD, AUTOSAVE_INTERVAL, MAX_AUTOSAVES } = require('./utils/constants');
 
     // Elements
     const scriptText = document.getElementById('scriptText');
@@ -73,8 +75,7 @@
     let positionDirty = false;        // true when user explicitly changed position — cleared after send
 
     // Unified animation loop - handles both playback interpolation and wheel scroll easing
-    const EASE_FACTOR = 0.35;       // Lower = smoother, higher = snappier
-    const SNAP_THRESHOLD = 0.005;   // % — when close enough, snap to target
+    // EASE_FACTOR and SNAP_THRESHOLD imported from constants.js
 
     function animationTick() {
       const diff = targetPosition - displayPosition;
@@ -168,8 +169,7 @@
     // Auto-save state
     let autoSaveInterval = null;
     let autoSaveQueue = [];
-    const MAX_AUTOSAVES = 5;
-    const AUTOSAVE_INTERVAL = 30000; // 30 seconds
+    // MAX_AUTOSAVES and AUTOSAVE_INTERVAL imported from constants.js
 
     // View position memory - remember cursor/scroll positions when switching views
     let lastMonitorClickPosition = null; // Character index clicked in monitor
@@ -827,20 +827,7 @@
       headerSessionTimer.textContent = formatTime(sessionTime);
     }
 
-    function formatTime(ms) {
-      const seconds = Math.floor(ms / 1000);
-      const hours = Math.floor(seconds / 3600);
-      const minutes = Math.floor((seconds % 3600) / 60);
-      const secs = seconds % 60;
-      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    }
-
-    function formatTimeShort(ms) {
-      const seconds = Math.floor(ms / 1000);
-      const minutes = Math.floor(seconds / 60);
-      const secs = seconds % 60;
-      return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    }
+    // formatTime and formatTimeShort imported from utils/time-formatter.js
 
     // ============================================
     // RECORDING TIMELINE UI
