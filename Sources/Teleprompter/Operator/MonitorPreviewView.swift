@@ -109,9 +109,9 @@ final class MonitorPreviewView: NSView {
             engine.totalDistance = Double(scrollView.cachedTextHeight)
             scrollView.applyStaticPosition(engine.currentPosition)
         }
-        if appearanceChanged {
-            scrollView.applyMirrorFlip(newState.appearance)
-        }
+        // Mirror/flip are intentionally NOT applied here — the operator's preview
+        // stays readable while the fullscreen teleprompter is reflected through
+        // the beam-splitter glass.
     }
 
     private func renderSizeForCurrentTarget(_ state: AppState) -> CGSize {

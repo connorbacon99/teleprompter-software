@@ -180,13 +180,18 @@ final class ScrollingTextView: NSView {
 
     private func applyMirrorFlipTransform() {
         // Scale around the bounds center so the flipped content stays on screen.
-        // CATransform3DScale on identity scales around (0, 0), which would
-        // translate everything off the visible area for negative scales.
+        // CA uses row-vector convention (v' = v * M), and CATransform3DTranslate/
+        // Scale produce t' = op * t — i.e. the newly-added op becomes the
+        // INNERMOST (applied first to the vector). For a centered scale we want
+        // M = T(-cx,-cy) * S * T(cx,cy), so we build it right-to-left: T(cx,cy)
+        // first, then S, then T(-cx,-cy).
         let cx = bounds.width * 0.5
         let cy = bounds.height * 0.5
-        var t = CATransform3DMakeTranslation(cx, cy, 0)
-        if currentMirror { t = CATransform3DScale(t, -1, 1, 1) }
-        if currentFlip { t = CATransform3DScale(t, 1, -1, 1) }
+        let sx: CGFloat = currentMirror ? -1 : 1
+        let sy: CGFloat = currentFlip ? -1 : 1
+        var t = CATransform3DIdentity
+        t = CATransform3DTranslate(t, cx, cy, 0)
+        t = CATransform3DScale(t, sx, sy, 1)
         t = CATransform3DTranslate(t, -cx, -cy, 0)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
