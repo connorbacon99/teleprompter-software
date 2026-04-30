@@ -17,6 +17,9 @@ final class ScrollingTextView: NSView {
 
     private(set) var cachedTextHeight: CGFloat = 0
 
+    private var currentMirror = false
+    private var currentFlip = false
+
     var horizontalPadding: CGFloat = 80
     var pixelsPerSecondAt1x: CGFloat = 80
     var showGuides: Bool = true {
@@ -89,6 +92,9 @@ final class ScrollingTextView: NSView {
         super.layout()
         layoutDecorations()
         textLayer.contentsScale = window?.backingScaleFactor ?? 2.0
+        // Re-apply mirror/flip with current bounds so the center pivot is
+        // up-to-date if the window resized.
+        applyMirrorFlipTransform()
     }
 
     private func layoutDecorations() {
@@ -167,10 +173,25 @@ final class ScrollingTextView: NSView {
     }
 
     func applyMirrorFlip(_ appearance: Appearance) {
-        var t = CATransform3DIdentity
-        if appearance.mirror { t = CATransform3DScale(t, -1, 1, 1) }
-        if appearance.flip { t = CATransform3DScale(t, 1, -1, 1) }
+        currentMirror = appearance.mirror
+        currentFlip = appearance.flip
+        applyMirrorFlipTransform()
+    }
+
+    private func applyMirrorFlipTransform() {
+        // Scale around the bounds center so the flipped content stays on screen.
+        // CATransform3DScale on identity scales around (0, 0), which would
+        // translate everything off the visible area for negative scales.
+        let cx = bounds.width * 0.5
+        let cy = bounds.height * 0.5
+        var t = CATransform3DMakeTranslation(cx, cy, 0)
+        if currentMirror { t = CATransform3DScale(t, -1, 1, 1) }
+        if currentFlip { t = CATransform3DScale(t, 1, -1, 1) }
+        t = CATransform3DTranslate(t, -cx, -cy, 0)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         layer?.sublayerTransform = t
+        CATransaction.commit()
     }
 
     func ty(forPosition percent: Double) -> CGFloat {
