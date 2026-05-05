@@ -98,11 +98,66 @@ final class ScriptTabBar: NSView {
         let add = NSButton(title: "+ Module", target: self, action: #selector(addScriptAction))
         add.bezelStyle = .recessed
         stackView.addArrangedSubview(add)
+
+        let importButton = NSButton(title: "+ Import…", target: self, action: #selector(importPowerPointAction))
+        importButton.bezelStyle = .recessed
+        importButton.toolTip = "Import a .pptx file's speaker notes as a new module."
+        stackView.addArrangedSubview(importButton)
     }
 
     @objc private func addScriptAction() {
         let count = store.state.scripts.count + 1
         store.dispatch(.scriptAdd(name: "Module \(count)", content: ""))
+    }
+
+    @objc private func importPowerPointAction() {
+        let panel = NSOpenPanel()
+        panel.allowedFileTypes = ["pptx"]
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose a PowerPoint file. Speaker notes from each slide become a new module, with [SLIDE N] markers."
+
+        let runImport: (URL) -> Void = { [weak self] url in
+            self?.handlePowerPointImport(url)
+        }
+        if let win = window {
+            panel.beginSheetModal(for: win) { response in
+                guard response == .OK, let url = panel.url else { return }
+                runImport(url)
+            }
+        } else {
+            let response = panel.runModal()
+            guard response == .OK, let url = panel.url else { return }
+            runImport(url)
+        }
+    }
+
+    private func handlePowerPointImport(_ url: URL) {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            do {
+                let content = try PowerPointImporter.extractNotes(from: url)
+                let name = url.deletingPathExtension().lastPathComponent
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
+                    self.store.dispatch(.scriptAdd(name: name, content: content))
+                }
+            } catch {
+                DispatchQueue.main.async { [weak self] in
+                    self?.showImportError(error)
+                }
+            }
+        }
+    }
+
+    private func showImportError(_ error: Error) {
+        let alert = NSAlert()
+        alert.messageText = "Could not import this PowerPoint."
+        alert.informativeText = error.localizedDescription
+        alert.alertStyle = .warning
+        if let win = window {
+            alert.beginSheetModal(for: win, completionHandler: nil)
+        } else {
+            alert.runModal()
+        }
     }
 
     @objc private func removeScriptAction(_ sender: NSButton) {

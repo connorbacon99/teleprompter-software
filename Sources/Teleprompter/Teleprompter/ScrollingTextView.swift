@@ -8,7 +8,15 @@ import QuartzCore
 /// state transitions stay visually synced because they receive the same
 /// animation parameters at the same media time.
 final class ScrollingTextView: NSView {
-    private let textLayer = CATextLayer()
+    /// Container layer that owns all visible text. Animation drives this layer's
+    /// transform, scrolling the entire script as one unit. We split the text
+    /// into multiple stacked CATextLayer "pages" because a single CATextLayer
+    /// silently fails to render when its bounds exceed the GPU's max 2D
+    /// texture size (~8192px on older Intel Macs ≈ 4096pt at 2× backing).
+    /// One container, many pages, one animation source — sync stays trivial.
+    private let scrollContainer = CALayer()
+    private var pageLayers: [CATextLayer] = []
+
     private let readingGuide = CALayer()
     private let leftTriangle = CAShapeLayer()
     private let rightTriangle = CAShapeLayer()
@@ -19,6 +27,11 @@ final class ScrollingTextView: NSView {
 
     private var currentMirror = false
     private var currentFlip = false
+
+    /// Hard cap on each text-page layer's height in points. Kept well under
+    /// 4096 (the per-side limit at 2× backing on an 8192-pixel-max GPU) so we
+    /// don't have to query the GPU's actual capabilities.
+    private let maxPageHeightPts: CGFloat = 3500
 
     var horizontalPadding: CGFloat = 80
     var pixelsPerSecondAt1x: CGFloat = 80
@@ -49,23 +62,19 @@ final class ScrollingTextView: NSView {
         layer?.backgroundColor = NSColor.black.cgColor
         layer?.masksToBounds = true
 
-        textLayer.alignmentMode = .center
-        textLayer.isWrapped = true
-        textLayer.contentsScale = NSScreen.main?.backingScaleFactor ?? 2.0
-        textLayer.anchorPoint = CGPoint(x: 0, y: 0)
+        scrollContainer.anchorPoint = CGPoint(x: 0, y: 0)
         // Hard-disable implicit animations on the properties we drive each
         // frame. This prevents subtle layer-time-tree differences between
-        // independently-created CATextLayers from producing different visual
+        // independently-created instances from producing different visual
         // states despite identical commanded values.
-        textLayer.actions = [
+        scrollContainer.actions = [
             "transform": NSNull(),
             "position": NSNull(),
             "bounds": NSNull(),
             "frame": NSNull(),
-            "contents": NSNull(),
-            "string": NSNull()
+            "sublayers": NSNull()
         ]
-        layer?.addSublayer(textLayer)
+        layer?.addSublayer(scrollContainer)
 
         // Reading guide line was visually distracting; the yellow triangles
         // serve the same purpose unambiguously.
@@ -91,7 +100,10 @@ final class ScrollingTextView: NSView {
     override func layout() {
         super.layout()
         layoutDecorations()
-        textLayer.contentsScale = window?.backingScaleFactor ?? 2.0
+        let scale = window?.backingScaleFactor ?? 2.0
+        for pageLayer in pageLayers {
+            pageLayer.contentsScale = scale
+        }
         // Re-apply mirror/flip with current bounds so the center pivot is
         // up-to-date if the window resized.
         applyMirrorFlipTransform()
@@ -140,36 +152,129 @@ final class ScrollingTextView: NSView {
         let baseFont = NSFont(name: appearance.fontFamily, size: CGFloat(appearance.fontSizePt))
             ?? NSFont.systemFont(ofSize: CGFloat(appearance.fontSizePt))
 
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = .center
-        paragraph.lineHeightMultiple = CGFloat(appearance.lineHeight)
-
+        // No paragraph style: CATextLayer renders attributed strings using its
+        // own internal CoreText configuration that doesn't reliably honor
+        // paragraph-style line-spacing properties (lineHeightMultiple,
+        // min/maximumLineHeight). Any mismatch between paragraph-style-aware
+        // measurement and the layer's rendering shows up as black gaps below
+        // the text in each page. Sticking to font + color attributes only
+        // means both `boundingRect` and CATextLayer use the font's natural
+        // line metrics, so measurement matches rendering. Horizontal
+        // centering moves to the layer via alignmentMode.
         let attrs: [NSAttributedString.Key: Any] = [
             .font: baseFont,
-            .foregroundColor: nsColor(fromHex: appearance.textColorHex),
-            .paragraphStyle: paragraph
+            .foregroundColor: nsColor(fromHex: appearance.textColorHex)
         ]
         let content = (script?.content.isEmpty ?? true) ? "— empty script —" : script!.content
         let attributed = NSAttributedString(string: content, attributes: attrs)
 
         let textWidth = max(1, bounds.width - horizontalPadding * 2)
-        let measured = attributed.boundingRect(
-            with: NSSize(width: textWidth, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading]
-        )
-        let textHeight = max(1, ceil(measured.height))
+
+        // TextKit lays out the entire script once so we know the precise y of
+        // every line, then we slice into pages at line boundaries below
+        // `maxPageHeightPts`. Using the same line breaks for both slicing and
+        // CATextLayer rendering keeps page seams invisible — each page holds a
+        // contiguous range of characters that wraps the same way it did during
+        // measurement.
+        let storage = NSTextStorage(attributedString: attributed)
+        let layoutManager = NSLayoutManager()
+        let textContainer = NSTextContainer(size: NSSize(width: textWidth, height: .greatestFiniteMagnitude))
+        textContainer.lineFragmentPadding = 0
+        storage.addLayoutManager(layoutManager)
+        layoutManager.addTextContainer(textContainer)
+        layoutManager.ensureLayout(for: textContainer)
+
+        // First pass: walk lines via NSLayoutManager to pick character break
+        // points only. We don't trust its y values for layout — CATextLayer
+        // uses CoreText, which can wrap and lay out slightly differently. The
+        // line breaks themselves are stable enough across both engines that
+        // breaking at one of NSLayoutManager's line starts won't split a
+        // visible word in the CATextLayer rendering.
+        var pageRanges: [NSRange] = []
+        var pageStartChar = 0
+        var pageStartY: CGFloat = 0
+
+        let glyphRange = layoutManager.glyphRange(for: textContainer)
+        layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { rect, _, _, lineGlyphRange, _ in
+            // If this line would push the page past the cap, close the page
+            // at the START of this line. First line of any page always fits,
+            // to avoid an infinite loop on a single very-tall paragraph.
+            if rect.maxY - pageStartY > self.maxPageHeightPts && pageStartY < rect.minY {
+                let charRange = layoutManager.characterRange(forGlyphRange: lineGlyphRange, actualGlyphRange: nil)
+                let pageEndChar = charRange.location
+                pageRanges.append(NSRange(location: pageStartChar, length: pageEndChar - pageStartChar))
+                pageStartChar = pageEndChar
+                pageStartY = rect.minY
+            }
+        }
+        // Final page
+        let finalLength = storage.length - pageStartChar
+        if finalLength > 0 || pageRanges.isEmpty {
+            pageRanges.append(NSRange(location: pageStartChar, length: max(0, finalLength)))
+        }
+
+        let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
+        let pageActions: [String: CAAction] = [
+            "transform": NSNull(),
+            "position": NSNull(),
+            "bounds": NSNull(),
+            "frame": NSNull(),
+            "contents": NSNull(),
+            "string": NSNull()
+        ]
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        textLayer.string = attributed
-        // Set bounds + position explicitly. Using frame= relied on CALayer's
-        // frame setter, which on a geometryFlipped parent layer was producing
-        // different position values for two equally-configured layers.
-        textLayer.bounds = CGRect(x: 0, y: 0, width: textWidth, height: textHeight)
-        textLayer.position = CGPoint(x: horizontalPadding, y: 0)
-        cachedTextHeight = textHeight
+
+        for old in pageLayers { old.removeFromSuperlayer() }
+        pageLayers.removeAll()
+
+        // Second pass: count CoreText's actual rendered lines per substring
+        // and multiply by the pinned line height. CTFramesetterSuggestFrameSize
+        // can include trailing line-gap padding that CATextLayer doesn't draw,
+        // so trusting the line count is more reliable than trusting the
+        // suggested-size height.
+        var yOffset: CGFloat = 0
+        for range in pageRanges {
+            let pageString = range.length > 0
+                ? attributed.attributedSubstring(from: range)
+                : NSAttributedString(string: "")
+            let measured = pageString.boundingRect(
+                with: NSSize(width: textWidth, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin]
+            )
+            let layerHeight = max(1, ceil(measured.height))
+
+            let pageLayer = CATextLayer()
+            pageLayer.alignmentMode = .center
+            pageLayer.isWrapped = true
+            pageLayer.contentsScale = scale
+            pageLayer.anchorPoint = CGPoint(x: 0, y: 0)
+            pageLayer.actions = pageActions
+            pageLayer.string = pageString
+            pageLayer.bounds = CGRect(x: 0, y: 0, width: textWidth, height: layerHeight)
+            pageLayer.position = CGPoint(x: horizontalPadding, y: yOffset)
+            scrollContainer.addSublayer(pageLayer)
+            pageLayers.append(pageLayer)
+
+            yOffset += layerHeight
+        }
+
+        let totalHeight = max(1, yOffset)
+        scrollContainer.bounds = CGRect(x: 0, y: 0, width: bounds.width, height: totalHeight)
+        scrollContainer.position = CGPoint(x: 0, y: 0)
+        cachedTextHeight = totalHeight
         layer?.backgroundColor = nsColor(fromHex: appearance.bgColorHex).cgColor
         CATransaction.commit()
+    }
+
+    private func coreTextLineCount(_ attributed: NSAttributedString, width: CGFloat) -> Int {
+        if attributed.length == 0 { return 1 }
+        let framesetter = CTFramesetterCreateWithAttributedString(attributed as CFAttributedString)
+        let path = CGPath(rect: CGRect(x: 0, y: 0, width: width, height: .greatestFiniteMagnitude), transform: nil)
+        let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: 0), path, nil)
+        let lines = CTFrameGetLines(frame) as! [CTLine]
+        return max(1, lines.count)
     }
 
     func applyMirrorFlip(_ appearance: Appearance) {
@@ -204,13 +309,13 @@ final class ScrollingTextView: NSView {
     }
 
     func applyStaticPosition(_ percent: Double) {
-        textLayer.removeAnimation(forKey: "scroll")
+        scrollContainer.removeAnimation(forKey: "scroll")
         // Half-pixel snap on the y-translation prevents fractional sub-pixel
         // differences between layer instances on different displays.
         let tyValue = (ty(forPosition: percent) * 2).rounded() / 2
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        textLayer.transform = CATransform3DMakeTranslation(0, tyValue, 0)
+        scrollContainer.transform = CATransform3DMakeTranslation(0, tyValue, 0)
         CATransaction.commit()
     }
 
@@ -221,7 +326,7 @@ final class ScrollingTextView: NSView {
         onFinish: @escaping () -> Void
     ) {
         guard cachedTextHeight > 0, bounds.height > 0 else { return }
-        textLayer.removeAnimation(forKey: "scroll")
+        scrollContainer.removeAnimation(forKey: "scroll")
 
         let startTy = ty(forPosition: startPercent)
         let endTy = ty(forPosition: 1.0)
@@ -247,25 +352,25 @@ final class ScrollingTextView: NSView {
         animation.delegate = AnimationFinishDelegate { finished in
             if finished { onFinish() }
         }
-        textLayer.add(animation, forKey: "scroll")
+        scrollContainer.add(animation, forKey: "scroll")
     }
 
     func stopScrolling() {
-        textLayer.removeAnimation(forKey: "scroll")
+        scrollContainer.removeAnimation(forKey: "scroll")
     }
 
     func hasActiveAnimation() -> Bool {
-        return textLayer.animation(forKey: "scroll") != nil
+        return scrollContainer.animation(forKey: "scroll") != nil
     }
 
     func visualPosition() -> Double {
         guard cachedTextHeight > 0 else { return 0 }
-        if let pres = textLayer.presentation() {
+        if let pres = scrollContainer.presentation() {
             let currentTy = pres.transform.m42
             let percent = (bounds.height * 0.5 - currentTy) / cachedTextHeight
             return max(0, min(1, Double(percent)))
         }
-        let currentTy = textLayer.transform.m42
+        let currentTy = scrollContainer.transform.m42
         let percent = (bounds.height * 0.5 - currentTy) / cachedTextHeight
         return max(0, min(1, Double(percent)))
     }
