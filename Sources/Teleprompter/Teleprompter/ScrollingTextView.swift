@@ -27,6 +27,10 @@ final class ScrollingTextView: NSView {
 
     private var currentMirror = false
     private var currentFlip = false
+    /// Last-applied scroll percent. Tracked so a flip toggle (which inverts
+    /// the y-axis used by `ty(forPosition:)`) can re-apply the current
+    /// position with the new sign without losing the user's place.
+    private var cachedPercent: Double = 0
 
     /// Hard cap on each text-page layer's height in points. Kept well under
     /// 4096 (the per-side limit at 2× backing on an 8192-pixel-max GPU) so we
@@ -284,12 +288,17 @@ final class ScrollingTextView: NSView {
     }
 
     private func applyMirrorFlipTransform() {
-        // Scale around the bounds center so the flipped content stays on screen.
-        // CA uses row-vector convention (v' = v * M), and CATransform3DTranslate/
-        // Scale produce t' = op * t — i.e. the newly-added op becomes the
-        // INNERMOST (applied first to the vector). For a centered scale we want
-        // M = T(-cx,-cy) * S * T(cx,cy), so we build it right-to-left: T(cx,cy)
-        // first, then S, then T(-cx,-cy).
+        // Reflect the whole scrollContainer (positions + content of every
+        // page) as a single visual unit — the camera/glass setup expects the
+        // entire on-screen image to be flipped as one. The container-wide
+        // approach also reverses the y-axis used for scroll translation, so
+        // we compensate in `ty(forPosition:)` below: when flip is on, the
+        // scroll-position formula is negated so playback still reads forward
+        // through the script.
+        //
+        // CA uses row-vector convention (v' = v * M); CATransform3DTranslate /
+        // Scale produce t' = op * t — the newly-added op is INNERMOST. To get
+        // M = T(-cx,-cy) * S * T(cx,cy), build right-to-left.
         let cx = bounds.width * 0.5
         let cy = bounds.height * 0.5
         let sx: CGFloat = currentMirror ? -1 : 1
@@ -300,15 +309,23 @@ final class ScrollingTextView: NSView {
         t = CATransform3DTranslate(t, -cx, -cy, 0)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        layer?.sublayerTransform = t
+        scrollContainer.sublayerTransform = t
+        // Re-apply the scroll position so its sign matches the new flip state.
+        let tyValue = (ty(forPosition: cachedPercent) * 2).rounded() / 2
+        scrollContainer.transform = CATransform3DMakeTranslation(0, tyValue, 0)
         CATransaction.commit()
     }
 
     func ty(forPosition percent: Double) -> CGFloat {
-        return bounds.height * 0.5 - cachedTextHeight * CGFloat(percent)
+        // Vertical flip reflects scrollContainer's y-axis, so the scroll
+        // translation must be negated for forward playback to still read
+        // forward through the script.
+        let normal = bounds.height * 0.5 - cachedTextHeight * CGFloat(percent)
+        return currentFlip ? -normal : normal
     }
 
     func applyStaticPosition(_ percent: Double) {
+        cachedPercent = percent
         scrollContainer.removeAnimation(forKey: "scroll")
         // Half-pixel snap on the y-translation prevents fractional sub-pixel
         // differences between layer instances on different displays.
@@ -332,7 +349,9 @@ final class ScrollingTextView: NSView {
         let endTy = ty(forPosition: 1.0)
         applyStaticPosition(startPercent)
 
-        let remaining = startTy - endTy
+        // |remaining| because vertical flip negates ty, so endTy > startTy
+        // when flip is on. Either way the scroll covers the same distance.
+        let remaining = abs(startTy - endTy)
         guard remaining > 0 else { onFinish(); return }
 
         let duration = TimeInterval(remaining / (pixelsPerSecondAt1x * CGFloat(speed)))
@@ -365,13 +384,12 @@ final class ScrollingTextView: NSView {
 
     func visualPosition() -> Double {
         guard cachedTextHeight > 0 else { return 0 }
-        if let pres = scrollContainer.presentation() {
-            let currentTy = pres.transform.m42
-            let percent = (bounds.height * 0.5 - currentTy) / cachedTextHeight
-            return max(0, min(1, Double(percent)))
-        }
-        let currentTy = scrollContainer.transform.m42
-        let percent = (bounds.height * 0.5 - currentTy) / cachedTextHeight
+        let rawTy = scrollContainer.presentation()?.transform.m42
+            ?? scrollContainer.transform.m42
+        // Inverse of `ty(forPosition:)`: when flip is on, ty was negated
+        // before being committed, so reverse that before solving for percent.
+        let normalTy = currentFlip ? -rawTy : rawTy
+        let percent = (bounds.height * 0.5 - normalTy) / cachedTextHeight
         return max(0, min(1, Double(percent)))
     }
 }
