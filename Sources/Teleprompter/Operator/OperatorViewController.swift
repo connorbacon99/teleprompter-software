@@ -27,6 +27,7 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
     private let speedLabel = NSTextField(labelWithString: "Speed: 1.00×")
     private let positionSlider = NSSlider(value: 0, minValue: 0, maxValue: 1, target: nil, action: nil)
     private let positionLabel = NSTextField(labelWithString: "Position: 0.0%")
+    private let progressLabel = NSTextField(labelWithString: "0% through script • ~0 min remaining at current speed")
     private let fontSizeSlider = NSSlider(value: 64, minValue: 24, maxValue: 200, target: nil, action: nil)
     private let fontSizeLabel = NSTextField(labelWithString: "Font: 64pt")
     private let mirrorCheckbox = NSButton(checkboxWithTitle: "Mirror (horizontal)", target: nil, action: nil)
@@ -39,6 +40,7 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
     private var positionPollTimer: Timer?
     private var bookmarkFlashLabel: NSTextField?
     private var bookmarkFlashTimer: Timer?
+    private var progressUpdateTimer: Timer?
 
     init(store: Store, engine: PlaybackEngine) {
         self.store = store
@@ -155,6 +157,11 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
             label.textColor = NSColor(white: 0.78, alpha: 1)
             label.font = NSFont.systemFont(ofSize: 12)
         }
+        progressLabel.textColor = NSColor(white: 0.62, alpha: 1)
+        progressLabel.font = NSFont.systemFont(ofSize: 11)
+        progressLabel.lineBreakMode = .byWordWrapping
+        progressLabel.maximumNumberOfLines = 2
+        progressLabel.preferredMaxLayoutWidth = 280
         for cb in [mirrorCheckbox, flipCheckbox] {
             cb.contentTintColor = NSColor(white: 0.92, alpha: 1)
         }
@@ -173,6 +180,7 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
             topRow,
             speedLabel, speedSlider,
             positionLabel, positionSlider,
+            progressLabel,
             spacer(8),
             sectionHeader("Appearance"),
             fontSizeLabel, fontSizeSlider,
@@ -282,6 +290,13 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
             }
             self.positionLabel.stringValue = String(format: "Position: %.1f%%", pos * 100)
         }
+        // Progress indicator refreshes 2× per second — capped per PRD so the
+        // label doesn't churn the runloop. Runs whether playing or paused so
+        // speed-slider drags update the remaining-time estimate too.
+        progressUpdateTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            self?.updateProgressLabel()
+        }
+        updateProgressLabel()
 
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self else { return event }
@@ -344,12 +359,15 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
         }
         positionPollTimer?.invalidate()
         positionPollTimer = nil
+        progressUpdateTimer?.invalidate()
+        progressUpdateTimer = nil
     }
 
     deinit {
         if let token = subscriptionToken { store.unsubscribe(token) }
         if let monitor = keyMonitor { NSEvent.removeMonitor(monitor) }
         positionPollTimer?.invalidate()
+        progressUpdateTimer?.invalidate()
         bookmarkFlashTimer?.invalidate()
     }
 
@@ -407,6 +425,41 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
         fontSizeLabel.stringValue = String(format: "Font: %.0fpt", state.appearance.fontSizePt)
         mirrorCheckbox.state = state.appearance.mirror ? .on : .off
         flipCheckbox.state = state.appearance.flip ? .on : .off
+        updateProgressLabel()
+    }
+
+    /// Refreshes `progressLabel` from current engine state. Called from the
+    /// 0.5s timer (during play and pause) and from `applyState` for snappy
+    /// response to slider drags. The static formatter is exercised in tests.
+    private func updateProgressLabel() {
+        progressLabel.stringValue = OperatorViewController.progressIndicatorText(
+            position: engine.currentPosition,
+            totalDistance: engine.totalDistance,
+            speed: engine.speed,
+            pixelsPerSecondAt1x: engine.pixelsPerSecondAt1x
+        )
+    }
+
+    /// Format the progress indicator string. Pure function — kept static so
+    /// the test target can call it without spinning up an NSViewController.
+    /// Returns "N% through script • ~M min remaining at current speed" when
+    /// both speed and totalDistance are positive; falls back to "~? min" when
+    /// the rate is undefined (paused-from-rest with no layout yet, or speed=0).
+    static func progressIndicatorText(
+        position: Double,
+        totalDistance: Double,
+        speed: Double,
+        pixelsPerSecondAt1x: Double
+    ) -> String {
+        let clamped = max(0, min(1, position))
+        let pct = Int((clamped * 100).rounded())
+        let rate = speed * pixelsPerSecondAt1x
+        guard rate > 0, totalDistance > 0 else {
+            return "\(pct)% through script • ~? min remaining at current speed"
+        }
+        let remainingSeconds = totalDistance * (1.0 - clamped) / rate
+        let remainingMin = max(0, Int((remainingSeconds / 60).rounded()))
+        return "\(pct)% through script • ~\(remainingMin) min remaining at current speed"
     }
 
     private var renderedDisplayIds: [UInt32] = []

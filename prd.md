@@ -140,7 +140,7 @@ tasks depend on. Always work the topmost task with `"passes": false`.
       "Estimate remaining time using the current scroll-rate (you can derive this from the engine's animation, or from a measured pace if available). If you don't have a precise pace, use a sensible heuristic and label it as approximate.",
       "Update at most twice per second (don't burn CPU on label refresh)"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "operator-ergonomics",

@@ -2,8 +2,8 @@
 
 ## Current Status
 **Last Updated:** 2026-05-11
-**Tasks Completed:** 8
-**Current Task:** None (next: operator-ergonomics — Show a progress indicator: 'NN% through script • ~MM min remaining at current speed')
+**Tasks Completed:** 9
+**Current Task:** None (next: operator-ergonomics — Visual session-divider row in the recording log table when the timer is reset)
 
 ---
 
@@ -146,3 +146,19 @@ Format:
   - `testRetakeSupersedesPriorFlubsInChapterWindow`
   - `testRecordingLogEntryDecodesWithoutSupersededFieldDefaultsToFalse`
 - **Notes:** The CSV header changed shape *again* (now seven columns instead of six). The Premiere/FCPXML export tasks coming up will use entry `kind` and `superseded` directly from the model, not by re-parsing CSV — so the column-order churn is contained to this one export. The supersede logic runs entirely inside the `recordingLogAdd` reducer case (no separate `markSuperseded` action) because the only trigger is "a retake was just added" — keeping it in one place makes the invariant easier to read. If a retake is later removed via `recordingLogRemove`, the prior flubs stay marked `superseded` — that's intentional for now (the operator's intent at the moment of the retake is what we capture), but a future iteration could revisit if it turns out to be confusing. UI does not yet surface `superseded` visually (greyed-out row, strikethrough) — only CSV export reflects it. That's deferred until the human reviews; the model + export side is what the editor handoff depends on.
+
+### 2026-05-11 — Task: operator-ergonomics — Show a progress indicator: 'NN% through script • ~MM min remaining at current speed'
+
+- **Files changed:**
+  - `Sources/Teleprompter/Operator/OperatorViewController.swift` — added a `progressLabel` NSTextField under the position slider in the operator sidebar (Playback section, before the spacer before Appearance). Style: smaller (11pt, white 0.62) than the slider labels so it reads as supplementary; wraps to 2 lines if it ever overflows. Added a `progressUpdateTimer: Timer?` that fires at 0.5 s while the view is visible — matches the PRD's "at most twice per second" cap and is independent of the existing 0.1s position-poll timer (which only fires during playback). `updateProgressLabel()` reads `engine.currentPosition`, `engine.totalDistance`, `engine.speed`, and `engine.pixelsPerSecondAt1x` and feeds them to a new static `progressIndicatorText(position:totalDistance:speed:pixelsPerSecondAt1x:)` helper. The static helper is pure (testable from XCTest with no NSView setup). Also called from the tail of `applyState` so slider drags get an immediate label refresh instead of waiting up to 500 ms for the next timer tick. Timer is invalidated in both `viewDidDisappear` and `deinit`.
+  - `Tests/TeleprompterTests/ReducerTests.swift` — added a `// MARK: - Progress indicator (operator-ergonomics)` section with four pure-function tests covering format, speed scaling, fallback, and clamping (see below).
+- **Commands:**
+  - `swift build` → success.
+  - `swift test` → **22/22 passing** (18 prior + 4 new).
+- **Tests added:** `Tests/TeleprompterTests/ReducerTests.swift`
+  - `testProgressIndicatorTextFormatsPercentAndMinutes` — midpoint of a 9600 pt @ 1× script reports "50% through script • ~1 min remaining at current speed"; start of a 14400 pt @ 1× script reports 3 min; end reports 100% and 0 min.
+  - `testProgressIndicatorTextDoubleSpeedHalvesRemaining` — same 14400 pt script at 2× (90 s = 2 min after rounding) and 0.5× (360 s = 6 min).
+  - `testProgressIndicatorTextFallsBackWhenRateOrDistanceIsZero` — speed=0 and totalDistance=0 both render the "~? min" sentinel rather than dividing by zero.
+  - `testProgressIndicatorTextClampsPositionOutsideUnitInterval` — defensive: negative and >1 positions clamp to 0% / 100% (and remaining-time is computed from the clamped value), so a caller passing 1.5 doesn't see "150% • ~-3 min".
+- **Manual smoke (UI):** Open the operator window with any script loaded. The new label below the position slider should read `NN% through script • ~MM min remaining at current speed` where NN matches the position slider's percentage. Drag the speed slider — `MM` should roughly double when halving speed and roughly halve when doubling speed, with refresh within ~0.5 s. Press Play and watch the percent climb while remaining minutes count down. The label updates while paused too (it's not gated on `engine.isPlaying`, unlike the 0.1 s position-slider poll). Drag the font slider — totalDistance updates on the next MonitorPreviewView layout pass, and the timer picks up the new remaining-time within 0.5 s.
+- **Notes:** `engine.totalDistance` is set by MonitorPreviewView and TeleprompterViewController during their relayout passes. If the operator opens the window and the monitor view hasn't laid out yet, `totalDistance` is still the engine's default 1.0 — the formula gives a near-zero remaining time on the very first tick, which the next 0.5 s tick corrects once layout finishes. I considered showing "calculating..." for that frame but it adds branching for ~500 ms of latency that the user is unlikely to notice. The `pixelsPerSecondAt1x` constant (80) is duplicated between PlaybackEngine and ScrollingTextView — not in scope to dedupe here, but worth flagging in case a future task touches the base scroll rate. The static helper takes the rate as a parameter for exactly that reason — if it ever becomes user-configurable, the formula doesn't change. Used `Int((x).rounded())` for both percent and minutes; a 30-second remainder rounds up to 1 min, which feels right for a status label.

@@ -377,4 +377,69 @@ final class ReducerTests: XCTestCase {
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: file.path), "non-log mutations must not trip the immediate-save path; they go through the debounce")
     }
+
+    // MARK: - Progress indicator (operator-ergonomics)
+
+    func testProgressIndicatorTextFormatsPercentAndMinutes() {
+        // 9600 pt total, 80 pt/s @ 1.0× = 120 s total. Halfway → 60 s remaining = 1 min.
+        let mid = OperatorViewController.progressIndicatorText(
+            position: 0.5, totalDistance: 9600, speed: 1.0, pixelsPerSecondAt1x: 80
+        )
+        XCTAssertEqual(mid, "50% through script • ~1 min remaining at current speed")
+
+        // Start of a 14400 pt script @ 1.0× → 180 s = 3 min remaining.
+        let start = OperatorViewController.progressIndicatorText(
+            position: 0, totalDistance: 14400, speed: 1.0, pixelsPerSecondAt1x: 80
+        )
+        XCTAssertEqual(start, "0% through script • ~3 min remaining at current speed")
+
+        // End of script → 100%, 0 min remaining.
+        let end = OperatorViewController.progressIndicatorText(
+            position: 1.0, totalDistance: 14400, speed: 1.0, pixelsPerSecondAt1x: 80
+        )
+        XCTAssertEqual(end, "100% through script • ~0 min remaining at current speed")
+    }
+
+    func testProgressIndicatorTextDoubleSpeedHalvesRemaining() {
+        // 14400 pt @ 2.0×, position 0 → 14400 / (2*80) = 90 s → rounds to 2 min.
+        let fast = OperatorViewController.progressIndicatorText(
+            position: 0, totalDistance: 14400, speed: 2.0, pixelsPerSecondAt1x: 80
+        )
+        XCTAssertEqual(fast, "0% through script • ~2 min remaining at current speed")
+
+        // Same script at 0.5× → 360 s → 6 min.
+        let slow = OperatorViewController.progressIndicatorText(
+            position: 0, totalDistance: 14400, speed: 0.5, pixelsPerSecondAt1x: 80
+        )
+        XCTAssertEqual(slow, "0% through script • ~6 min remaining at current speed")
+    }
+
+    func testProgressIndicatorTextFallsBackWhenRateOrDistanceIsZero() {
+        // Speed 0 → rate is undefined → "~? min".
+        let zeroSpeed = OperatorViewController.progressIndicatorText(
+            position: 0.25, totalDistance: 9600, speed: 0, pixelsPerSecondAt1x: 80
+        )
+        XCTAssertEqual(zeroSpeed, "25% through script • ~? min remaining at current speed")
+
+        // Empty / unlaid-out script (default totalDistance < pixel-rate) → still
+        // a sensible string; specifically totalDistance == 0 falls back.
+        let zeroDistance = OperatorViewController.progressIndicatorText(
+            position: 0, totalDistance: 0, speed: 1.0, pixelsPerSecondAt1x: 80
+        )
+        XCTAssertEqual(zeroDistance, "0% through script • ~? min remaining at current speed")
+    }
+
+    func testProgressIndicatorTextClampsPositionOutsideUnitInterval() {
+        // Defensive: callers passing slightly-negative or >1 positions should not
+        // produce "-3% through script" or remaining < 0.
+        let underflow = OperatorViewController.progressIndicatorText(
+            position: -0.2, totalDistance: 14400, speed: 1.0, pixelsPerSecondAt1x: 80
+        )
+        XCTAssertEqual(underflow, "0% through script • ~3 min remaining at current speed")
+
+        let overflow = OperatorViewController.progressIndicatorText(
+            position: 1.5, totalDistance: 14400, speed: 1.0, pixelsPerSecondAt1x: 80
+        )
+        XCTAssertEqual(overflow, "100% through script • ~0 min remaining at current speed")
+    }
 }
