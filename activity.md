@@ -2,8 +2,8 @@
 
 ## Current Status
 **Last Updated:** 2026-05-11
-**Tasks Completed:** 4
-**Current Task:** None (next: edit-tracking — stamp each RecordingLogEntry with a wallclock ISO-8601 timestamp)
+**Tasks Completed:** 5
+**Current Task:** None (next: edit-tracking — auto-supersede flub entries when a retake-from-here is logged)
 
 ---
 
@@ -86,3 +86,17 @@ Format:
   - `testRecordingLogSetKindUpdatesEntryKind`
 - **Manual smoke (UI):** Open the operator window, start a recording session, hit "Log line" a few times. The new "Kind" column shows a popup defaulting to "Flub". Changing the selection should immediately reflect in the popup and (because `recordingLogSetKind` is flagged as a log mutation) be persisted synchronously to `state.json`. Killing the app right after changing the popup should leave the new kind on disk.
 - **Notes:** `RecordingLogEntry` was previously a synthesized-Codable struct; explicit `CodingKeys` + custom `init(from:)` means future fields (wallclock, superseded) follow the same tolerant-decode pattern. The custom init also forced an explicit memberwise initializer — kept the parameter order matching the old call sites (`id, timeSeconds, line, note`) so `TrackerView.logAction()` still works unchanged. The PRD's next two edit-tracking tasks (wallclock, supersede-on-retake) will need to add their own `decodeIfPresent` calls inside the same `init(from:)`.
+
+### 2026-05-11 — Task: edit-tracking — Stamp each RecordingLogEntry with a wallclock ISO-8601 timestamp
+
+- **Files changed:**
+  - `Sources/Teleprompter/Model/AppState.swift` — added `var wallclock: Date` to `RecordingLogEntry`. Memberwise init defaults `wallclock = Date()` so every callsite gets a real timestamp by default. `init(from:)` decodes `wallclock` via `decodeIfPresent`, falling back to `.distantPast` for legacy entries (chosen over "now" so old entries are visibly "unknown" rather than mis-dated to whenever the user reopened the app). Updated `CodingKeys` to include `wallclock`.
+  - `Sources/Teleprompter/Operator/TrackerView.swift` — `logAction()` now passes `wallclock: Date()` explicitly to the entry init (already the default, but makes the stamping intent legible). Promoted `csvText(for:moduleName:)` to a `static` method so the test target can call it without instantiating an NSView. Added a `Wallclock` column to the CSV header (between `Time` and `Kind`) plus a `Kind` column (already had popup UI, was missing from CSV — fixed in passing). Added `csvWallclock(_:)` helper that returns an ISO-8601 (UTC `Z`) string, or empty string when the wallclock is `.distantPast` (so legacy entries don't render as year-0001 in the editor's CSV import).
+  - `Tests/TeleprompterTests/ReducerTests.swift` — `import Cocoa` so the file can name `TrackerView` (static csvText call). Extended the legacy-decode test to additionally assert `wallclock == .distantPast`. Added `testRecordingLogEntryDefaultWallclockIsRecent` (default-init wallclock falls between two `Date()` snapshots) and `testCSVExportContainsParseableISO8601WallclockColumn` (asserts header is `Module,Time,Wallclock,Kind,Line,Note`, that a known timestamp round-trips through `ISO8601DateFormatter` within 1s, and that `.distantPast` wallclock renders as empty in the CSV).
+- **Commands:**
+  - `swift build` → success.
+  - `swift test` → **12/12 passing** (10 prior + 2 new).
+- **Tests added:** `Tests/TeleprompterTests/ReducerTests.swift`
+  - `testRecordingLogEntryDefaultWallclockIsRecent`
+  - `testCSVExportContainsParseableISO8601WallclockColumn`
+- **Notes:** The CSV header changed shape (added `Wallclock` and `Kind` columns) — any downstream tooling reading the CSV via fixed column positions instead of names would need updating, but as of this iteration there is no such tooling. The Premiere/FCPXML export tasks coming up will produce their own column layouts, so this CSV is purely for human review or generic spreadsheet use. The `Kind` column had been added to the UI in the previous task but was missing from CSV export; folded that fix into this task since the wallclock change already touched the same lines. The static `iso8601Formatter` is cached at module load (ISO8601DateFormatter is documented as thread-safe). `Date.distantPast == Date.distantPast` is a stable equality comparison in Swift so the "render as empty" guard is reliable.

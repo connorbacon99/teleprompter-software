@@ -96,7 +96,7 @@ tasks depend on. Always work the topmost task with `"passes": false`.
       "Update CSV export to include a `Wallclock` column with ISO-8601 formatting",
       "Add a unit test confirming the CSV output contains the wallclock column with a parseable ISO-8601 value"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "edit-tracking",

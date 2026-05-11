@@ -25,17 +25,25 @@ struct RecordingLogEntry: Codable, Equatable, Identifiable {
     /// Semantic category. Older persisted entries decode without this field
     /// and fall back to `.flub` (see `init(from:)`).
     var kind: EntryKind
+    /// Absolute wallclock time at which the entry was created. Stamped in the
+    /// memberwise init so any `RecordingLogEntry(id:…)` call gets a real time
+    /// without callers having to remember. Older persisted entries decode
+    /// without this field and fall back to `.distantPast` — that sentinel is
+    /// chosen so the CSV/markers export can render it as "unknown" rather
+    /// than as a misleading "now".
+    var wallclock: Date
 
-    init(id: UUID, timeSeconds: Double, line: String, note: String, kind: EntryKind = .flub) {
+    init(id: UUID, timeSeconds: Double, line: String, note: String, kind: EntryKind = .flub, wallclock: Date = Date()) {
         self.id = id
         self.timeSeconds = timeSeconds
         self.line = line
         self.note = note
         self.kind = kind
+        self.wallclock = wallclock
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, timeSeconds, line, note, kind
+        case id, timeSeconds, line, note, kind, wallclock
     }
 
     init(from decoder: Decoder) throws {
@@ -46,6 +54,10 @@ struct RecordingLogEntry: Codable, Equatable, Identifiable {
         self.note = try c.decode(String.self, forKey: .note)
         // Tolerant default for pre-EntryKind state.json files.
         self.kind = try c.decodeIfPresent(EntryKind.self, forKey: .kind) ?? .flub
+        // Tolerant default for pre-wallclock state.json files. Use distantPast
+        // (not "now") so legacy entries are visibly unknown rather than
+        // misdated to the moment the user happened to reopen the app.
+        self.wallclock = try c.decodeIfPresent(Date.self, forKey: .wallclock) ?? .distantPast
     }
 }
 

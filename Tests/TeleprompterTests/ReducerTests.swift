@@ -1,4 +1,5 @@
 import XCTest
+import Cocoa
 @testable import Teleprompter
 
 final class ReducerTests: XCTestCase {
@@ -147,8 +148,8 @@ final class ReducerTests: XCTestCase {
 
     func testRecordingLogEntryDecodesWithoutKindFieldDefaultsToFlub() throws {
         // Simulates a state.json written by an older build that predates
-        // EntryKind. The decoded entry must come back with kind == .flub
-        // instead of throwing.
+        // EntryKind and wallclock. The decoded entry must come back with
+        // kind == .flub and wallclock == .distantPast instead of throwing.
         let legacyJSON = """
         {
             "id": "11111111-2222-3333-4444-555555555555",
@@ -160,8 +161,50 @@ final class ReducerTests: XCTestCase {
         let data = Data(legacyJSON.utf8)
         let entry = try JSONDecoder().decode(RecordingLogEntry.self, from: data)
         XCTAssertEqual(entry.kind, .flub, "legacy entries with no kind field must default to .flub")
+        XCTAssertEqual(entry.wallclock, .distantPast, "legacy entries with no wallclock must default to .distantPast")
         XCTAssertEqual(entry.line, "from before kinds existed")
         XCTAssertEqual(entry.timeSeconds, 12.5)
+    }
+
+    func testRecordingLogEntryDefaultWallclockIsRecent() {
+        let before = Date()
+        let entry = RecordingLogEntry(id: UUID(), timeSeconds: 0, line: "", note: "")
+        let after = Date()
+        XCTAssertGreaterThanOrEqual(entry.wallclock, before)
+        XCTAssertLessThanOrEqual(entry.wallclock, after)
+    }
+
+    func testCSVExportContainsParseableISO8601WallclockColumn() {
+        let when = Date(timeIntervalSince1970: 1_700_000_000) // 2023-11-14T22:13:20Z
+        let entries = [
+            RecordingLogEntry(id: UUID(), timeSeconds: 42, line: "first words", note: "n1", kind: .flub, wallclock: when),
+            RecordingLogEntry(id: UUID(), timeSeconds: 99, line: "second", note: "", kind: .chapter, wallclock: .distantPast)
+        ]
+        let csv = TrackerView.csvText(for: entries, moduleName: "Module A")
+        let lines = csv.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+        XCTAssertEqual(lines.count, 3, "header + two rows")
+        XCTAssertEqual(lines[0], "Module,Time,Wallclock,Kind,Line,Note")
+
+        // Row 1: real wallclock → ISO-8601, parseable back.
+        let row1Fields = lines[1].split(separator: ",").map(String.init)
+        XCTAssertEqual(row1Fields[0], "Module A")
+        XCTAssertEqual(row1Fields[1], "0:42")
+        let wallclockField = row1Fields[2]
+        XCTAssertFalse(wallclockField.isEmpty, "wallclock column must be present for a stamped entry")
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime]
+        let parsed = parser.date(from: wallclockField)
+        XCTAssertNotNil(parsed, "wallclock column must be parseable as ISO-8601; got \(wallclockField)")
+        if let parsed = parsed {
+            XCTAssertEqual(parsed.timeIntervalSince1970, when.timeIntervalSince1970, accuracy: 1.0)
+        }
+        XCTAssertEqual(row1Fields[3], "Flub")
+
+        // Row 2: legacy .distantPast wallclock → empty column so editors
+        // don't see a year-0001 timestamp in their CSV.
+        let row2Fields = lines[2].split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+        XCTAssertEqual(row2Fields[2], "", "legacy .distantPast wallclock must render as empty in CSV")
+        XCTAssertEqual(row2Fields[3], "Chapter")
     }
 
     func testRecordingLogSetKindUpdatesEntryKind() {

@@ -350,7 +350,7 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
         guard let scriptId = activeScriptId else { return }
         let elapsed = max(0, currentElapsedSeconds() ?? 0)
         let line = paragraphAtCurrentScrollPosition()
-        let entry = RecordingLogEntry(id: UUID(), timeSeconds: elapsed, line: line, note: "")
+        let entry = RecordingLogEntry(id: UUID(), timeSeconds: elapsed, line: line, note: "", wallclock: Date())
         store.dispatch(.recordingLogAdd(scriptId: scriptId, entry: entry))
         // Scroll to the new row so the operator can immediately see it.
         DispatchQueue.main.async { [weak self] in
@@ -434,23 +434,43 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
         return paragraphs.last ?? ""
     }
 
-    private func csvText(for entries: [RecordingLogEntry], moduleName: String) -> String {
-        var lines: [String] = ["Module,Time,Line,Note"]
+    static func csvText(for entries: [RecordingLogEntry], moduleName: String) -> String {
+        var lines: [String] = ["Module,Time,Wallclock,Kind,Line,Note"]
         for e in entries {
             lines.append([
-                Self.csvField(moduleName),
-                Self.csvTime(e.timeSeconds),
-                Self.csvField(e.line),
-                Self.csvField(e.note)
+                csvField(moduleName),
+                csvTime(e.timeSeconds),
+                csvField(csvWallclock(e.wallclock)),
+                csvField(kindTitle(e.kind)),
+                csvField(e.line),
+                csvField(e.note)
             ].joined(separator: ","))
         }
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    private func csvText(for entries: [RecordingLogEntry], moduleName: String) -> String {
+        return Self.csvText(for: entries, moduleName: moduleName)
     }
 
     private static func csvTime(_ seconds: Double) -> String {
         let total = Int(seconds.rounded(.down))
         return String(format: "%d:%02d", total / 60, total % 60)
     }
+
+    /// ISO-8601 (UTC, "Z") rendering of an entry's wallclock. Legacy entries
+    /// without a wallclock decode as `.distantPast` — we render those as the
+    /// empty string so editors don't see year-0001 timestamps in the CSV.
+    static func csvWallclock(_ date: Date) -> String {
+        if date == .distantPast { return "" }
+        return iso8601Formatter.string(from: date)
+    }
+
+    private static let iso8601Formatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
 
     private static func csvField(_ value: String) -> String {
         if value.contains(",") || value.contains("\"") || value.contains("\n") {
