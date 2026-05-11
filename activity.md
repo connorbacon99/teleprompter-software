@@ -2,8 +2,8 @@
 
 ## Current Status
 **Last Updated:** 2026-05-11
-**Tasks Completed:** 6
-**Current Task:** None (next: edit-tracking — register a global hotkey that logs a flub from any focused app)
+**Tasks Completed:** 7
+**Current Task:** None (next: operator-ergonomics — add a bookmark hotkey (B) that adds a cue marker at the current scroll position)
 
 ---
 
@@ -100,6 +100,21 @@ Format:
   - `testRecordingLogEntryDefaultWallclockIsRecent`
   - `testCSVExportContainsParseableISO8601WallclockColumn`
 - **Notes:** The CSV header changed shape (added `Wallclock` and `Kind` columns) — any downstream tooling reading the CSV via fixed column positions instead of names would need updating, but as of this iteration there is no such tooling. The Premiere/FCPXML export tasks coming up will produce their own column layouts, so this CSV is purely for human review or generic spreadsheet use. The `Kind` column had been added to the UI in the previous task but was missing from CSV export; folded that fix into this task since the wallclock change already touched the same lines. The static `iso8601Formatter` is cached at module load (ISO8601DateFormatter is documented as thread-safe). `Date.distantPast == Date.distantPast` is a stable equality comparison in Swift so the "render as empty" guard is reliable.
+
+### 2026-05-11 — Task: edit-tracking — Register a global hotkey that logs a flub from any focused app
+
+- **Files changed:**
+  - `Sources/Teleprompter/AppDelegate.swift` — added `import Carbon.HIToolbox`, declared `Notification.Name.teleprompterFlubHotkey`, and added `registerFlubHotkey()` / `unregisterFlubHotkey()` helpers. Registration happens at the tail of `applicationDidFinishLaunching` (after the operator window is constructed) and unregistration is the first thing in `applicationWillTerminate`. The handler hops to main with `DispatchQueue.main.async` and posts the notification — it never touches the store directly so all dispatch stays on AppKit's thread. Both `InstallEventHandler` and `RegisterEventHotKey` failures NSLog and return without crashing (the task's "do not crash if the combo is taken" requirement). Combo: ⌃⌥F via `kVK_ANSI_F` + `controlKey | optionKey`.
+  - `Sources/Teleprompter/Operator/TrackerView.swift` — `init` registers an observer for `.teleprompterFlubHotkey`; `deinit` removes it. The handler is a one-line `@objc func handleFlubHotkey() { logAction() }` so the hotkey path and the "Log line" button share the same dispatch logic (active script, current elapsed timer state, paragraph at current scroll position, kind=.flub, wallclock=now). No changes to `logAction()` itself.
+  - `Tests/TeleprompterTests/ReducerTests.swift` — added `testFlubHotkeyNotificationAppendsFlubEntryToActiveScript`: sets script content, constructs a TrackerView with a real Store+Engine, posts the `.teleprompterFlubHotkey` notification, and asserts a single new entry exists with `kind == .flub` and a non-empty `line` (paragraph capture worked).
+- **Commands:**
+  - `swift build` → success.
+  - `swift test` → **15/15 passing** (14 prior + 1 new).
+- **Tests added:** `Tests/TeleprompterTests/ReducerTests.swift`
+  - `testFlubHotkeyNotificationAppendsFlubEntryToActiveScript`
+- **Manual smoke (UI):** Launch the app, then activate any other app (Finder, Safari, the camera control app). Press ⌃⌥F. Switch back to the operator window's Tracker tab; a new entry of kind "Flub" should be at the bottom of the table, time stamped at the live recording-timer elapsed value (or 0:00 if the timer was idle), with the paragraph at the current scroll position captured into the Line column. If another app has registered ⌃⌥F system-wide, the registration will fail silently — check the console for "RegisterEventHotKey for ⌃⌥F failed" — and the in-app Log line button remains the fallback.
+- **Notes:** Carbon's `RegisterEventHotKey` is the right primitive here per the PRD — it's deprecated on paper but still works on Catalina+ and does not require accessibility entitlements, which would complicate distribution. The 'TELE' (0x54454C45) hotkey signature is unique per app per Apple's documentation. The Carbon-handler → notification indirection means TrackerView doesn't need to know anything about Carbon, and a future "tracker view not yet built" startup state simply means no observer to fire — registration still succeeds, the notification gets posted to nobody, no crash.
+  - Per the task description "active whenever the operator window is open": in this codebase the operator window opens during `applicationDidFinishLaunching` and closing it terminates the app (per `applicationShouldTerminateAfterLastWindowClosed`), so registering at launch / unregistering at terminate exactly matches that lifecycle. If a future task makes the operator window closable-without-quitting we'll need to gate registration on the willClose/becameVisible notifications instead.
 
 ### 2026-05-11 — Task: edit-tracking — Auto-supersede flub entries when a retake-from-here is logged
 

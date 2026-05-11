@@ -290,6 +290,34 @@ final class ReducerTests: XCTestCase {
         XCTAssertEqual(state.activeScript?.recordingLog.first?.kind, .chapter)
     }
 
+    /// Posting the global-hotkey notification must cause TrackerView to log a
+    /// flub entry into the active script — same end state as pressing the
+    /// in-app "Log line" button. The actual Carbon registration is wired in
+    /// AppDelegate; here we exercise the notification → dispatch path because
+    /// that's the seam between the OS-level hotkey and our store.
+    func testFlubHotkeyNotificationAppendsFlubEntryToActiveScript() {
+        var initial = AppState.initial()
+        // Give the active script some content so paragraphAtCurrentScrollPosition
+        // has something to extract.
+        if let firstId = initial.scripts.first?.id {
+            initial = reduce(state: initial,
+                             action: .scriptSetContent(id: firstId, content: "Paragraph one.\nParagraph two."))
+        }
+        let store = Store(initialState: initial)
+        let engine = PlaybackEngine()
+        let tracker = TrackerView(store: store, engine: engine)
+        defer { _ = tracker } // keep alive past the notification post
+
+        XCTAssertEqual(store.state.activeScript?.recordingLog.count, 0)
+
+        NotificationCenter.default.post(name: .teleprompterFlubHotkey, object: nil)
+
+        let log = store.state.activeScript?.recordingLog ?? []
+        XCTAssertEqual(log.count, 1, "the global hotkey notification must produce exactly one new log entry")
+        XCTAssertEqual(log.first?.kind, .flub, "hotkey-logged entries must default to .flub")
+        XCTAssertFalse(log.first?.line.isEmpty ?? true, "the new entry should capture the paragraph at the current scroll position")
+    }
+
     func testNonRecordingLogActionDoesNotTriggerSynchronousPersistence() throws {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("teleprompter-no-immediate-save-\(UUID().uuidString)", isDirectory: true)

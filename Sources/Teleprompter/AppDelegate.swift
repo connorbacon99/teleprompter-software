@@ -1,4 +1,13 @@
 import Cocoa
+import Carbon.HIToolbox
+
+/// Posted when the global ⌃⌥F hotkey fires. `TrackerView` observes this and
+/// logs a flub at the current scroll position, the same way the in-app
+/// "Log line" button does — letting the operator drop a flub marker from any
+/// focused app (camera control, browser, etc.) without alt-tabbing.
+public extension Notification.Name {
+    static let teleprompterFlubHotkey = Notification.Name("TeleprompterFlubHotkey")
+}
 
 public final class AppDelegate: NSObject, NSApplicationDelegate {
     let store: Store
@@ -8,6 +17,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     var teleprompterWindowController: TeleprompterWindowController?
     private var lastEngineApplied: (playing: Bool, speed: Double, position: Double)?
     private var persistenceSaveTimer: Timer?
+
+    private var flubHotKeyRef: EventHotKeyRef?
+    private var flubHotKeyHandler: EventHandlerRef?
 
     public override init() {
         // Load persisted scripts/appearance if present, otherwise use defaults.
@@ -58,6 +70,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 object: opWin
             )
         }
+
+        registerFlubHotkey()
 
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -124,6 +138,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
+        unregisterFlubHotkey()
         // Force a final, non-debounced save before exit.
         persistenceSaveTimer?.invalidate()
         Persistence.save(.init(
@@ -131,6 +146,73 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             activeScriptId: store.state.activeScriptId,
             appearance: store.state.appearance
         ))
+    }
+
+    // MARK: - Global flub hotkey (⌃⌥F)
+
+    /// Registers a Carbon `RegisterEventHotKey` for ⌃⌥F. Carbon hotkeys are
+    /// in-process but route from the user's whole session, so the operator can
+    /// hit the combo while the camera-control app (or any other) has focus
+    /// and we still get the event. No accessibility entitlements required.
+    /// On failure (combo already taken system-wide, handler install failure)
+    /// we NSLog and return — never crash; the in-app "Log line" button is the
+    /// fallback path.
+    private func registerFlubHotkey() {
+        var eventSpec = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed)
+        )
+        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
+        let handlerStatus = InstallEventHandler(
+            GetApplicationEventTarget(),
+            { (_, _, userData) -> OSStatus in
+                guard let userData = userData else { return noErr }
+                // The Carbon handler can fire on a non-main thread; hop back
+                // to main before posting the notification so observers
+                // (TrackerView, store dispatch) stay on AppKit's thread.
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .teleprompterFlubHotkey, object: nil)
+                }
+                _ = userData // keep the userData reference live for the compiler
+                return noErr
+            },
+            1,
+            &eventSpec,
+            selfPtr,
+            &flubHotKeyHandler
+        )
+        if handlerStatus != noErr {
+            NSLog("Teleprompter: InstallEventHandler for flub hotkey failed (status=\(handlerStatus)); ⌃⌥F will be inactive.")
+            return
+        }
+
+        // Signature 'TELE' (0x54454C45) namespaces this hotkey so a future
+        // second hotkey can use the same handler with a different id.
+        let hotKeyID = EventHotKeyID(signature: OSType(0x54454C45), id: 1)
+        let keyCode = UInt32(kVK_ANSI_F)
+        let modifiers = UInt32(controlKey | optionKey)
+        let regStatus = RegisterEventHotKey(
+            keyCode,
+            modifiers,
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &flubHotKeyRef
+        )
+        if regStatus != noErr {
+            NSLog("Teleprompter: RegisterEventHotKey for ⌃⌥F failed (status=\(regStatus)); the combo may already be taken system-wide. Use the in-app Log line button instead.")
+        }
+    }
+
+    private func unregisterFlubHotkey() {
+        if let ref = flubHotKeyRef {
+            UnregisterEventHotKey(ref)
+            flubHotKeyRef = nil
+        }
+        if let handler = flubHotKeyHandler {
+            RemoveEventHandler(handler)
+            flubHotKeyHandler = nil
+        }
     }
 
     private func persistenceSaveAfter(action: Action, state: AppState) {

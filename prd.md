@@ -119,7 +119,7 @@ tasks depend on. Always work the topmost task with `"passes": false`.
       "Unregister on app terminate",
       "If Carbon registration fails (e.g., combo already taken system-wide), log a warning and continue — do not crash"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "operator-ergonomics",

@@ -61,6 +61,12 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
             self?.applyState(state)
         }
         startTickTimer()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleFlubHotkey),
+            name: .teleprompterFlubHotkey,
+            object: nil
+        )
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -68,6 +74,15 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     deinit {
         tickTimer?.invalidate()
         if let token = subscriptionToken { store.unsubscribe(token) }
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    /// Global-hotkey path: same logging behavior as the in-app "Log line"
+    /// button. The hotkey is registered in AppDelegate; we listen via
+    /// NotificationCenter so the dispatch happens with the TrackerView's
+    /// already-resolved active script and live timer state.
+    @objc private func handleFlubHotkey() {
+        logAction()
     }
 
     // MARK: - Layout
