@@ -6,6 +6,14 @@ struct CueMarker: Codable, Equatable, Identifiable {
     var position: Double
 }
 
+enum EntryKind: String, Codable, CaseIterable {
+    case flub
+    case clean
+    case chapter
+    case retake
+    case note
+}
+
 struct RecordingLogEntry: Codable, Equatable, Identifiable {
     var id: UUID
     /// Seconds elapsed since recording timer started (after countdown).
@@ -14,6 +22,31 @@ struct RecordingLogEntry: Codable, Equatable, Identifiable {
     var line: String
     /// Free-text note (clean / cut / pause between slides / etc.).
     var note: String
+    /// Semantic category. Older persisted entries decode without this field
+    /// and fall back to `.flub` (see `init(from:)`).
+    var kind: EntryKind
+
+    init(id: UUID, timeSeconds: Double, line: String, note: String, kind: EntryKind = .flub) {
+        self.id = id
+        self.timeSeconds = timeSeconds
+        self.line = line
+        self.note = note
+        self.kind = kind
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, timeSeconds, line, note, kind
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(UUID.self, forKey: .id)
+        self.timeSeconds = try c.decode(Double.self, forKey: .timeSeconds)
+        self.line = try c.decode(String.self, forKey: .line)
+        self.note = try c.decode(String.self, forKey: .note)
+        // Tolerant default for pre-EntryKind state.json files.
+        self.kind = try c.decodeIfPresent(EntryKind.self, forKey: .kind) ?? .flub
+    }
 }
 
 struct Script: Codable, Equatable, Identifiable {
@@ -111,6 +144,7 @@ enum Action {
     case recordingLogAdd(scriptId: UUID, entry: RecordingLogEntry)
     case recordingLogUpdateLine(scriptId: UUID, entryId: UUID, line: String)
     case recordingLogUpdateNote(scriptId: UUID, entryId: UUID, note: String)
+    case recordingLogSetKind(scriptId: UUID, entryId: UUID, kind: EntryKind)
     case recordingLogRemove(scriptId: UUID, entryId: UUID)
     case recordingLogClear(scriptId: UUID)
 
@@ -147,7 +181,7 @@ extension Action {
     var isRecordingLogMutation: Bool {
         switch self {
         case .recordingLogAdd, .recordingLogUpdateLine, .recordingLogUpdateNote,
-             .recordingLogRemove, .recordingLogClear:
+             .recordingLogSetKind, .recordingLogRemove, .recordingLogClear:
             return true
         default:
             return false

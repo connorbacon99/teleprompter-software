@@ -88,6 +88,7 @@ final class ReducerTests: XCTestCase {
             .recordingLogAdd(scriptId: scriptId, entry: entry),
             .recordingLogUpdateLine(scriptId: scriptId, entryId: entryId, line: "x"),
             .recordingLogUpdateNote(scriptId: scriptId, entryId: entryId, note: "x"),
+            .recordingLogSetKind(scriptId: scriptId, entryId: entryId, kind: .chapter),
             .recordingLogRemove(scriptId: scriptId, entryId: entryId),
             .recordingLogClear(scriptId: scriptId),
         ]
@@ -142,6 +143,37 @@ final class ReducerTests: XCTestCase {
         XCTAssertEqual(snap?.scripts.first?.recordingLog.count, 1)
         XCTAssertEqual(snap?.scripts.first?.recordingLog.first?.id, entry.id)
         XCTAssertEqual(snap?.scripts.first?.recordingLog.first?.line, "first words after the flub")
+    }
+
+    func testRecordingLogEntryDecodesWithoutKindFieldDefaultsToFlub() throws {
+        // Simulates a state.json written by an older build that predates
+        // EntryKind. The decoded entry must come back with kind == .flub
+        // instead of throwing.
+        let legacyJSON = """
+        {
+            "id": "11111111-2222-3333-4444-555555555555",
+            "timeSeconds": 12.5,
+            "line": "from before kinds existed",
+            "note": "old entry"
+        }
+        """
+        let data = Data(legacyJSON.utf8)
+        let entry = try JSONDecoder().decode(RecordingLogEntry.self, from: data)
+        XCTAssertEqual(entry.kind, .flub, "legacy entries with no kind field must default to .flub")
+        XCTAssertEqual(entry.line, "from before kinds existed")
+        XCTAssertEqual(entry.timeSeconds, 12.5)
+    }
+
+    func testRecordingLogSetKindUpdatesEntryKind() {
+        var state = AppState.initial()
+        let scriptId = state.activeScriptId
+        let entry = RecordingLogEntry(id: UUID(), timeSeconds: 1, line: "x", note: "y")
+        XCTAssertEqual(entry.kind, .flub, "default kind on init should be .flub")
+        state = reduce(state: state, action: .recordingLogAdd(scriptId: scriptId, entry: entry))
+
+        state = reduce(state: state, action: .recordingLogSetKind(scriptId: scriptId, entryId: entry.id, kind: .chapter))
+
+        XCTAssertEqual(state.activeScript?.recordingLog.first?.kind, .chapter)
     }
 
     func testNonRecordingLogActionDoesNotTriggerSynchronousPersistence() throws {

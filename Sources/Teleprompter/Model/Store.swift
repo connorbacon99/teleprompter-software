@@ -118,6 +118,12 @@ func reduce(state: AppState, action: Action) -> AppState {
             s.scripts[sIdx].recordingLog[eIdx].note = note
         }
 
+    case .recordingLogSetKind(let scriptId, let entryId, let kind):
+        if let sIdx = s.scripts.firstIndex(where: { $0.id == scriptId }),
+           let eIdx = s.scripts[sIdx].recordingLog.firstIndex(where: { $0.id == entryId }) {
+            s.scripts[sIdx].recordingLog[eIdx].kind = kind
+        }
+
     case .recordingLogRemove(let scriptId, let entryId):
         if let idx = s.scripts.firstIndex(where: { $0.id == scriptId }) {
             s.scripts[idx].recordingLog.removeAll { $0.id == entryId }

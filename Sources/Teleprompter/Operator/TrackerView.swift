@@ -120,6 +120,13 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
         timeCol.maxWidth = 100
         tableView.addTableColumn(timeCol)
 
+        let kindCol = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("kind"))
+        kindCol.title = "Kind"
+        kindCol.width = 100
+        kindCol.minWidth = 90
+        kindCol.maxWidth = 140
+        tableView.addTableColumn(kindCol)
+
         let lineCol = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("line"))
         lineCol.title = "Line"
         lineCol.width = 360
@@ -462,6 +469,32 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
         guard row < entries.count, let column = tableColumn else { return nil }
         let entry = entries[row]
         let cell = NSTableCellView()
+
+        if column.identifier.rawValue == "kind" {
+            let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+            popup.translatesAutoresizingMaskIntoConstraints = false
+            popup.bezelStyle = .roundRect
+            popup.isBordered = true
+            popup.font = NSFont.systemFont(ofSize: 11)
+            for k in EntryKind.allCases {
+                popup.addItem(withTitle: Self.kindTitle(k))
+                popup.lastItem?.representedObject = k.rawValue
+            }
+            if let idx = EntryKind.allCases.firstIndex(of: entry.kind) {
+                popup.selectItem(at: idx)
+            }
+            popup.identifier = NSUserInterfaceItemIdentifier("kind:\(entry.id.uuidString)")
+            popup.target = self
+            popup.action = #selector(kindPopupChanged(_:))
+            cell.addSubview(popup)
+            NSLayoutConstraint.activate([
+                popup.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 2),
+                popup.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -2),
+                popup.centerYAnchor.constraint(equalTo: cell.centerYAnchor)
+            ])
+            return cell
+        }
+
         let field = NSTextField()
         field.translatesAutoresizingMaskIntoConstraints = false
         field.isBordered = false
@@ -494,6 +527,28 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
             field.centerYAnchor.constraint(equalTo: cell.centerYAnchor)
         ])
         return cell
+    }
+
+    @objc private func kindPopupChanged(_ sender: NSPopUpButton) {
+        guard let scriptId = activeScriptId,
+              let identifier = sender.identifier?.rawValue else { return }
+        let parts = identifier.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2,
+              parts[0] == "kind",
+              let entryId = UUID(uuidString: parts[1]),
+              let raw = sender.selectedItem?.representedObject as? String,
+              let kind = EntryKind(rawValue: raw) else { return }
+        store.dispatch(.recordingLogSetKind(scriptId: scriptId, entryId: entryId, kind: kind))
+    }
+
+    static func kindTitle(_ kind: EntryKind) -> String {
+        switch kind {
+        case .flub: return "Flub"
+        case .clean: return "Clean"
+        case .chapter: return "Chapter"
+        case .retake: return "Retake"
+        case .note: return "Note"
+        }
     }
 }
 

@@ -2,8 +2,8 @@
 
 ## Current Status
 **Last Updated:** 2026-05-11
-**Tasks Completed:** 3
-**Current Task:** None (next: edit-tracking — add EntryKind field to RecordingLogEntry)
+**Tasks Completed:** 4
+**Current Task:** None (next: edit-tracking — stamp each RecordingLogEntry with a wallclock ISO-8601 timestamp)
 
 ---
 
@@ -70,3 +70,19 @@ Format:
   - `testRecordingLogActionTriggersSynchronousPersistence` — wires a store with an action observer that mirrors the AppDelegate behavior (sync `Persistence.saveTo` on log mutations), dispatches a `recordingLogAdd`, and asserts the file exists on disk by the time `dispatch` returns and that `loadFrom` reads the entry back.
   - `testNonRecordingLogActionDoesNotTriggerSynchronousPersistence` — dispatches `setFontSize`, `setPosition`, and `scriptSetContent` and asserts no file is written, confirming the debounce path is preserved for non-log mutations.
 - **Notes:** The action-observer pattern is generally useful — any future side-effect that depends on *which* action fired (not just the resulting state) can hook into it. Also: I deliberately did NOT re-fire the persistence save on app startup. The old code's `store.subscribe { ... schedulePersistenceSave }` was called once with the initial state and scheduled a debounced save right after launch. The new `subscribeActions` path doesn't fire on subscribe, so the first save now happens only after the user does something. That matches `applicationWillTerminate`'s explicit final save and removes a tiny bit of disk noise at startup.
+
+### 2026-05-11 — Task: edit-tracking — Add an EntryKind field to RecordingLogEntry
+
+- **Files changed:**
+  - `Sources/Teleprompter/Model/AppState.swift` — added `enum EntryKind: String, Codable, CaseIterable { flub, clean, chapter, retake, note }`; added `var kind: EntryKind` to `RecordingLogEntry` with a custom `init(from:)` that uses `decodeIfPresent` so old persisted state defaults to `.flub`; added a memberwise init defaulting `kind = .flub`. Added `recordingLogSetKind(scriptId:entryId:kind:)` to `Action` and extended `isRecordingLogMutation` to cover it (immediate-save invariant must apply to kind changes too).
+  - `Sources/Teleprompter/Model/Store.swift` — reduced `recordingLogSetKind` by locating the script + entry and assigning `kind`.
+  - `Sources/Teleprompter/Operator/TrackerView.swift` — added a "Kind" column (between Time and Line) backed by an `NSPopUpButton`. The popup's identifier carries the entry id (same `kind:<uuid>` scheme used for line/note text fields); selection dispatches `recordingLogSetKind`. Added a `kindTitle(_:)` static helper for display titles.
+  - `Tests/TeleprompterTests/ReducerTests.swift` — added `testRecordingLogEntryDecodesWithoutKindFieldDefaultsToFlub` (decodes legacy JSON with no `kind` key) and `testRecordingLogSetKindUpdatesEntryKind`. Extended `testRecordingLogActionsAreFlaggedForImmediatePersistence` to include `recordingLogSetKind` in the must-be-flagged set.
+- **Commands:**
+  - `swift build` → success.
+  - `swift test` → **10/10 passing** (8 prior + 2 new).
+- **Tests added:** `Tests/TeleprompterTests/ReducerTests.swift`
+  - `testRecordingLogEntryDecodesWithoutKindFieldDefaultsToFlub`
+  - `testRecordingLogSetKindUpdatesEntryKind`
+- **Manual smoke (UI):** Open the operator window, start a recording session, hit "Log line" a few times. The new "Kind" column shows a popup defaulting to "Flub". Changing the selection should immediately reflect in the popup and (because `recordingLogSetKind` is flagged as a log mutation) be persisted synchronously to `state.json`. Killing the app right after changing the popup should leave the new kind on disk.
+- **Notes:** `RecordingLogEntry` was previously a synthesized-Codable struct; explicit `CodingKeys` + custom `init(from:)` means future fields (wallclock, superseded) follow the same tolerant-decode pattern. The custom init also forced an explicit memberwise initializer — kept the parameter order matching the old call sites (`id, timeSeconds, line, note`) so `TrackerView.logAction()` still works unchanged. The PRD's next two edit-tracking tasks (wallclock, supersede-on-retake) will need to add their own `decodeIfPresent` calls inside the same `init(from:)`.

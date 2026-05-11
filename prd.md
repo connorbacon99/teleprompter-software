@@ -84,7 +84,7 @@ tasks depend on. Always work the topmost task with `"passes": false`.
       "Surface kind as a popup-button column in `TrackerView`'s table",
       "Add a unit test that decodes a JSON entry without a `kind` field and confirms it defaults to `.flub`"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "edit-tracking",
