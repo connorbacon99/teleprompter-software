@@ -1,4 +1,5 @@
 import Cocoa
+import Teleprompter
 
 let app = NSApplication.shared
 let delegate = AppDelegate()

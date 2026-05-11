@@ -5,12 +5,22 @@ let package = Package(
     name: "Teleprompter",
     platforms: [.macOS(.v10_15)],
     products: [
-        .executable(name: "Teleprompter", targets: ["Teleprompter"])
+        .executable(name: "Teleprompter", targets: ["TeleprompterApp"])
     ],
     targets: [
-        .executableTarget(
+        .target(
             name: "Teleprompter",
             path: "Sources/Teleprompter"
+        ),
+        .executableTarget(
+            name: "TeleprompterApp",
+            dependencies: ["Teleprompter"],
+            path: "Sources/TeleprompterApp"
+        ),
+        .testTarget(
+            name: "TeleprompterTests",
+            dependencies: ["Teleprompter"],
+            path: "Tests/TeleprompterTests"
         )
     ]
 )

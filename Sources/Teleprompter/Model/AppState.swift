@@ -6,11 +6,22 @@ struct CueMarker: Codable, Equatable, Identifiable {
     var position: Double
 }
 
+struct RecordingLogEntry: Codable, Equatable, Identifiable {
+    var id: UUID
+    /// Seconds elapsed since recording timer started (after countdown).
+    var timeSeconds: Double
+    /// Captured paragraph text (the "first words of where they restarted").
+    var line: String
+    /// Free-text note (clean / cut / pause between slides / etc.).
+    var note: String
+}
+
 struct Script: Codable, Equatable, Identifiable {
     var id: UUID
     var name: String
     var content: String
     var cues: [CueMarker]
+    var recordingLog: [RecordingLogEntry]
 }
 
 struct Appearance: Codable, Equatable {
@@ -54,7 +65,7 @@ struct AppState: Codable, Equatable {
     var teleprompterOpen: Bool
 
     static func initial() -> AppState {
-        let firstScript = Script(id: UUID(), name: "Untitled", content: "", cues: [])
+        let firstScript = Script(id: UUID(), name: "Untitled", content: "", cues: [], recordingLog: [])
         return AppState(
             scripts: [firstScript],
             activeScriptId: firstScript.id,
@@ -96,6 +107,12 @@ enum Action {
 
     case cueAdd(scriptId: UUID, label: String, position: Double)
     case cueRemove(scriptId: UUID, cueId: UUID)
+
+    case recordingLogAdd(scriptId: UUID, entry: RecordingLogEntry)
+    case recordingLogUpdateLine(scriptId: UUID, entryId: UUID, line: String)
+    case recordingLogUpdateNote(scriptId: UUID, entryId: UUID, note: String)
+    case recordingLogRemove(scriptId: UUID, entryId: UUID)
+    case recordingLogClear(scriptId: UUID)
 
     case play
     case pause

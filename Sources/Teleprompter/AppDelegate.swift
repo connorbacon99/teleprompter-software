@@ -1,14 +1,32 @@
 import Cocoa
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
-    let store = Store(initialState: AppState.initial())
+public final class AppDelegate: NSObject, NSApplicationDelegate {
+    let store: Store
     let engine = PlaybackEngine()
 
     var operatorWindowController: OperatorWindowController?
     var teleprompterWindowController: TeleprompterWindowController?
     private var lastEngineApplied: (playing: Bool, speed: Double, position: Double)?
+    private var persistenceSaveTimer: Timer?
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    public override init() {
+        // Load persisted scripts/appearance if present, otherwise use defaults.
+        // Playback / display / teleprompter-window state always start clean.
+        var initial = AppState.initial()
+        if let snap = Persistence.load(), !snap.scripts.isEmpty {
+            initial.scripts = snap.scripts
+            if let id = snap.activeScriptId, snap.scripts.contains(where: { $0.id == id }) {
+                initial.activeScriptId = id
+            } else if let firstId = snap.scripts.first?.id {
+                initial.activeScriptId = firstId
+            }
+            initial.appearance = snap.appearance
+        }
+        self.store = Store(initialState: initial)
+        super.init()
+    }
+
+    public func applicationDidFinishLaunching(_ notification: Notification) {
         installMainMenu()
 
         engine.onPlaybackFinished = { [weak self] in
@@ -16,6 +34,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         store.subscribe { [weak self] state in
             self?.applyEngineFromState(state)
+        }
+        store.subscribe { [weak self] state in
+            self?.schedulePersistenceSave(state)
         }
 
         refreshDisplays()
@@ -98,8 +119,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return NSScreen.screens.first { displayId(for: $0) == id }
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+    public func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return true
+    }
+
+    public func applicationWillTerminate(_ notification: Notification) {
+        // Force a final, non-debounced save before exit.
+        persistenceSaveTimer?.invalidate()
+        Persistence.save(.init(
+            scripts: store.state.scripts,
+            activeScriptId: store.state.activeScriptId,
+            appearance: store.state.appearance
+        ))
+    }
+
+    private func schedulePersistenceSave(_ state: AppState) {
+        // Debounce so rapid edits (e.g. typing in the editor) don't thrash
+        // the disk. 500ms is short enough that no realistic crash window
+        // loses meaningful work.
+        persistenceSaveTimer?.invalidate()
+        persistenceSaveTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
+            guard let self = self else { return }
+            Persistence.save(.init(
+                scripts: self.store.state.scripts,
+                activeScriptId: self.store.state.activeScriptId,
+                appearance: self.store.state.appearance
+            ))
+        }
     }
 
     func openTeleprompter() {

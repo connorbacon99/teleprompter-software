@@ -6,7 +6,7 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
     private var subscriptionToken: UUID?
 
     private let segmentedControl = NSSegmentedControl(
-        labels: ["Editor", "Monitor"],
+        labels: ["Editor", "Monitor", "Tracker"],
         trackingMode: .selectOne,
         target: nil,
         action: nil
@@ -15,6 +15,7 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
     private let editorScrollView = NSScrollView()
     private let editorTextView = NSTextView()
     private var monitorView: MonitorPreviewView!
+    private var trackerView: TrackerView!
     private var tabBar: ScriptTabBar!
 
     private let playPauseButton = NSButton(title: "Play", target: nil, action: nil)
@@ -105,8 +106,14 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
         monitorView.translatesAutoresizingMaskIntoConstraints = false
         monitorView.isHidden = true
 
+        // Tracker
+        trackerView = TrackerView(store: store, engine: engine)
+        trackerView.translatesAutoresizingMaskIntoConstraints = false
+        trackerView.isHidden = true
+
         contentContainer.addSubview(editorScrollView)
         contentContainer.addSubview(monitorView)
+        contentContainer.addSubview(trackerView)
 
         // Sidebar controls
         playPauseButton.target = self
@@ -230,6 +237,11 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
             monitorView.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor),
             monitorView.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor),
 
+            trackerView.topAnchor.constraint(equalTo: contentContainer.topAnchor),
+            trackerView.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor),
+            trackerView.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor),
+            trackerView.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor),
+
             // Enforce minimum width on the editor area so AppKit doesn't collapse it
             contentContainer.widthAnchor.constraint(greaterThanOrEqualToConstant: 600),
 
@@ -331,9 +343,10 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
     }
 
     @objc private func segmentChanged() {
-        let editor = segmentedControl.selectedSegment == 0
-        editorScrollView.isHidden = !editor
-        monitorView.isHidden = editor
+        let idx = segmentedControl.selectedSegment
+        editorScrollView.isHidden = idx != 0
+        monitorView.isHidden = idx != 1
+        trackerView.isHidden = idx != 2
     }
 
     private func applyState(_ state: AppState) {

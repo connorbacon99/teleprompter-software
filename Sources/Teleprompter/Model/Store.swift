@@ -37,7 +37,7 @@ func reduce(state: AppState, action: Action) -> AppState {
     var s = state
     switch action {
     case .scriptAdd(let name, let content):
-        let script = Script(id: UUID(), name: name, content: content, cues: [])
+        let script = Script(id: UUID(), name: name, content: content, cues: [], recordingLog: [])
         s.scripts.append(script)
         s.activeScriptId = script.id
         s.playback.playing = false
@@ -79,6 +79,33 @@ func reduce(state: AppState, action: Action) -> AppState {
     case .cueRemove(let scriptId, let cueId):
         if let idx = s.scripts.firstIndex(where: { $0.id == scriptId }) {
             s.scripts[idx].cues.removeAll { $0.id == cueId }
+        }
+
+    case .recordingLogAdd(let scriptId, let entry):
+        if let idx = s.scripts.firstIndex(where: { $0.id == scriptId }) {
+            s.scripts[idx].recordingLog.append(entry)
+        }
+
+    case .recordingLogUpdateLine(let scriptId, let entryId, let line):
+        if let sIdx = s.scripts.firstIndex(where: { $0.id == scriptId }),
+           let eIdx = s.scripts[sIdx].recordingLog.firstIndex(where: { $0.id == entryId }) {
+            s.scripts[sIdx].recordingLog[eIdx].line = line
+        }
+
+    case .recordingLogUpdateNote(let scriptId, let entryId, let note):
+        if let sIdx = s.scripts.firstIndex(where: { $0.id == scriptId }),
+           let eIdx = s.scripts[sIdx].recordingLog.firstIndex(where: { $0.id == entryId }) {
+            s.scripts[sIdx].recordingLog[eIdx].note = note
+        }
+
+    case .recordingLogRemove(let scriptId, let entryId):
+        if let idx = s.scripts.firstIndex(where: { $0.id == scriptId }) {
+            s.scripts[idx].recordingLog.removeAll { $0.id == entryId }
+        }
+
+    case .recordingLogClear(let scriptId):
+        if let idx = s.scripts.firstIndex(where: { $0.id == scriptId }) {
+            s.scripts[idx].recordingLog.removeAll()
         }
 
     case .play:
