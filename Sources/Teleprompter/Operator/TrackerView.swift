@@ -339,6 +339,9 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
             }
         }()
         guard needsConfirm else {
+            // Reset of an already-idle timer is a no-op; don't insert a
+            // synthetic session divider for it (there was no session
+            // boundary to demarcate).
             rec = .idle
             updateStartStopButton()
             updateTimerDisplay()
@@ -351,9 +354,7 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
         alert.addButton(withTitle: "Reset")
         alert.addButton(withTitle: "Cancel")
         let confirm: () -> Void = { [weak self] in
-            self?.rec = .idle
-            self?.updateStartStopButton()
-            self?.updateTimerDisplay()
+            self?.applyResetWithDivider()
         }
         if let win = window {
             alert.beginSheetModal(for: win) { response in
@@ -363,6 +364,46 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
             confirm()
         }
     }
+
+    /// Confirmed-reset path: drops a synthetic `.session` divider into the
+    /// recording log so the tracker table (and the exported CSV) show where
+    /// session N ended and session N+1 began. Skipped when there are no
+    /// existing entries — an immediate reset with an empty log doesn't need
+    /// a divider.
+    private func applyResetWithDivider() {
+        if let scriptId = activeScriptId, !entries.isEmpty {
+            let priorSessions = entries.filter { $0.kind == .session }.count
+            let now = Date()
+            let label = Self.sessionDividerLabel(priorDividerCount: priorSessions, wallclock: now)
+            let entry = RecordingLogEntry(
+                id: UUID(),
+                timeSeconds: 0,
+                line: label,
+                note: "",
+                kind: .session,
+                wallclock: now
+            )
+            store.dispatch(.recordingLogAdd(scriptId: scriptId, entry: entry))
+        }
+        rec = .idle
+        updateStartStopButton()
+        updateTimerDisplay()
+    }
+
+    /// Builds the label that goes on a session-divider entry. The new session
+    /// number is `priorDividerCount + 2` because the implicit first session
+    /// (entries before any divider) is Session 1, so the first divider opens
+    /// Session 2.
+    static func sessionDividerLabel(priorDividerCount: Int, wallclock: Date) -> String {
+        let newSessionNumber = priorDividerCount + 2
+        return "Session \(newSessionNumber) started \(sessionStartedFormatter.string(from: wallclock))"
+    }
+
+    private static let sessionStartedFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return f
+    }()
 
     @objc private func countdownChanged() {
         countdownSecondsConfig = countdownStepper.integerValue
@@ -514,17 +555,43 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
         let entry = entries[row]
         let cell = NSTableCellView()
 
+        // Session-divider rows: render only the line column with header
+        // styling. Time / Kind / Note columns get an empty cell so the
+        // SessionDividerRowView's background paints through.
+        if entry.kind == .session {
+            if column.identifier.rawValue == "line" {
+                let label = NSTextField(labelWithString: entry.line)
+                label.translatesAutoresizingMaskIntoConstraints = false
+                label.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+                label.textColor = NSColor(white: 0.95, alpha: 1)
+                label.drawsBackground = false
+                label.isBordered = false
+                label.isEditable = false
+                label.isSelectable = true
+                cell.addSubview(label)
+                NSLayoutConstraint.activate([
+                    label.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 4),
+                    label.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -4),
+                    label.centerYAnchor.constraint(equalTo: cell.centerYAnchor)
+                ])
+            }
+            return cell
+        }
+
         if column.identifier.rawValue == "kind" {
             let popup = NSPopUpButton(frame: .zero, pullsDown: false)
             popup.translatesAutoresizingMaskIntoConstraints = false
             popup.bezelStyle = .roundRect
             popup.isBordered = true
             popup.font = NSFont.systemFont(ofSize: 11)
-            for k in EntryKind.allCases {
+            // The .session kind isn't operator-selectable — it's only ever
+            // produced by the reset-timer flow as a synthetic divider.
+            let selectable = EntryKind.allCases.filter { $0 != .session }
+            for k in selectable {
                 popup.addItem(withTitle: Self.kindTitle(k))
                 popup.lastItem?.representedObject = k.rawValue
             }
-            if let idx = EntryKind.allCases.firstIndex(of: entry.kind) {
+            if let idx = selectable.firstIndex(of: entry.kind) {
                 popup.selectItem(at: idx)
             }
             popup.identifier = NSUserInterfaceItemIdentifier("kind:\(entry.id.uuidString)")
@@ -592,6 +659,37 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
         case .chapter: return "Chapter"
         case .retake: return "Retake"
         case .note: return "Note"
+        case .session: return "Session"
+        }
+    }
+
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        guard row < entries.count, entries[row].kind == .session else { return nil }
+        return SessionDividerRowView()
+    }
+
+    func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
+        guard row < entries.count, entries[row].kind == .session else { return tableView.rowHeight }
+        return 36
+    }
+
+    /// Background-painted row view used for the synthetic `.session` divider
+    /// entries. Slightly lighter than the surrounding table so the boundary
+    /// reads as a header band, with hairlines at top and bottom to set it
+    /// off from neighbouring rows. Selection is suppressed so the divider
+    /// can't be mistaken for a regular log entry.
+    private final class SessionDividerRowView: NSTableRowView {
+        override func drawBackground(in dirtyRect: NSRect) {
+            NSColor(white: 0.18, alpha: 1).setFill()
+            bounds.fill()
+            NSColor(white: 0.32, alpha: 1).setFill()
+            NSRect(x: 0, y: 0, width: bounds.width, height: 1).fill()
+            NSRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1).fill()
+        }
+        override func drawSelection(in dirtyRect: NSRect) {}
+        override var isEmphasized: Bool {
+            get { false }
+            set { _ = newValue }
         }
     }
 

@@ -2,8 +2,8 @@
 
 ## Current Status
 **Last Updated:** 2026-05-11
-**Tasks Completed:** 9
-**Current Task:** None (next: operator-ergonomics — Visual session-divider row in the recording log table when the timer is reset)
+**Tasks Completed:** 10
+**Current Task:** None (next: stability — Don't crash if the secondary display is disconnected mid-session)
 
 ---
 
@@ -146,6 +146,33 @@ Format:
   - `testRetakeSupersedesPriorFlubsInChapterWindow`
   - `testRecordingLogEntryDecodesWithoutSupersededFieldDefaultsToFalse`
 - **Notes:** The CSV header changed shape *again* (now seven columns instead of six). The Premiere/FCPXML export tasks coming up will use entry `kind` and `superseded` directly from the model, not by re-parsing CSV — so the column-order churn is contained to this one export. The supersede logic runs entirely inside the `recordingLogAdd` reducer case (no separate `markSuperseded` action) because the only trigger is "a retake was just added" — keeping it in one place makes the invariant easier to read. If a retake is later removed via `recordingLogRemove`, the prior flubs stay marked `superseded` — that's intentional for now (the operator's intent at the moment of the retake is what we capture), but a future iteration could revisit if it turns out to be confusing. UI does not yet surface `superseded` visually (greyed-out row, strikethrough) — only CSV export reflects it. That's deferred until the human reviews; the model + export side is what the editor handoff depends on.
+
+### 2026-05-11 — Task: operator-ergonomics — Visual session-divider row in the recording log table when the timer is reset
+
+- **Files changed:**
+  - `Sources/Teleprompter/Model/AppState.swift` — added `.session` to `EntryKind` for synthetic divider entries. Note in the case-comment that it's not operator-selectable (no popup option) and that the supersede logic treats it as a chapter-equivalent boundary.
+  - `Sources/Teleprompter/Model/Store.swift` — broadened the supersede boundary in the `recordingLogAdd` reducer case from "most recent `.chapter`" to "most recent `.chapter` OR `.session`". This is a correctness fix surfaced by introducing the session boundary: a retake in session N must not flip flubs in session N-1.
+  - `Sources/Teleprompter/Operator/TrackerView.swift` —
+    - `resetAction()` now routes the confirmed-reset path through a new `applyResetWithDivider()` helper that dispatches a synthetic `.session` `RecordingLogEntry` (timeSeconds 0, line = "Session N started YYYY-MM-DD HH:MM:SS", wallclock now) when there are existing entries. Reset of an already-idle timer or an empty log still goes through the no-op branch unchanged.
+    - Added a static `sessionDividerLabel(priorDividerCount:wallclock:)` helper so the label format is testable headlessly. Numbering: `priorDividerCount + 2` so the first divider opens "Session 2" (entries before any divider are the implicit Session 1).
+    - Added a `tableView(_:rowViewForRow:)` / `tableView(_:heightOfRow:)` pair that returns a custom `SessionDividerRowView` (taller 36pt row, lighter background ~white 0.18 with 1px hairlines top/bottom, no selection emphasis) for `.session` rows and falls through to the default otherwise.
+    - `viewFor` short-circuits for `.session` rows: only the line column renders content (semibold 12pt label with the divider text); the other columns return empty cells so the row-view background paints through. No popup, no editable text fields on divider rows.
+    - The Kind popup on non-session rows now filters `.session` out of `EntryKind.allCases` so an operator can't accidentally turn a regular entry into a synthetic divider.
+    - `kindTitle` gained a `case .session: return "Session"` so CSV export and any future UI surface gets a sensible display string.
+  - `Tests/TeleprompterTests/ReducerTests.swift` — added four tests covering the divider label, the cross-session supersede guarantee, CSV rendering, and the reducer-level reset+divider sequence (see below).
+- **Commands:**
+  - `swift build` → success.
+  - `swift test` → **26/26 passing** (22 prior + 4 new).
+- **Tests added:** `Tests/TeleprompterTests/ReducerTests.swift`
+  - `testSessionDividerLabelFormatsSessionNumberAndWallclock`
+  - `testRetakeDoesNotSupersedeFlubsAcrossSessionBoundary`
+  - `testCSVExportRendersSessionDividerRow`
+  - `testTrackerResetWithEntriesInsertsSessionDividerThenIdle`
+- **Manual smoke (UI):** Open the operator window with any script that already has a couple of logged entries (or log a couple of flubs first). Hit Start → wait a few seconds → hit Reset → confirm in the sheet. A new row should appear at the bottom of the tracker table styled as a header band (taller, lighter background, hairlines top/bottom, semibold text in the Line column reading "Session 2 started <today's date HH:MM:SS>"). The Kind column on that row is empty (no popup). Hit Start/Reset a second time → another divider appears reading "Session 3 started ...". Confirm the operator-selectable Kind popup on regular entries no longer offers "Session" in the dropdown list. Confirm CSV export: a divider row renders as `<module>,0:00,<iso8601>,Session,live,"Session N started …",`.
+- **Notes:** Implementation choice: option (a) — a new `.session` `EntryKind` — wins over option (b) — a parallel `sessionDividers: [Date]` array on `Script` — by a wide margin on row-math invasiveness. With option (a), `numberOfRows`, `tableView.reloadData()` after `applyState`, and the index-by-id lookups in `controlTextDidEndEditing` / `kindPopupChanged` all remain unchanged; the only table-side adds are the row-view + heightOfRow delegate methods and a short-circuit branch in `viewFor`. Option (b) would have forced a parallel iteration scheme over both arrays at every row index lookup, which is the exact kind of churn the PRD told me to minimize.
+  - The CSV "blank row" option from the PRD wasn't strictly needed — the divider renders fine through the standard column layout with `kind=Session` and the human-readable label in the `Line` column. Downstream Premiere / FCPXML exports (later tasks) will read `entry.kind` directly off the model anyway, so a special CSV shape would only fragment the format.
+  - The supersede-boundary widening (`.chapter` → `.chapter` OR `.session`) is a behavior change for any user who had logged a retake in a previously-flubbed session and reset the timer in between (under the new rule, those earlier flubs would stay live where before they'd be superseded). In practice this is a corner case that produces a *more conservative* edit map — the editor sees the flubs as live takes to review rather than silently skipping them — which matches the PRD's "seamless editor handoff" success metric. No existing tests broke; the prior `testRetakeSupersedesPriorFlubsInChapterWindow` already pinned the chapter-boundary semantics and the new `testRetakeDoesNotSupersedeFlubsAcrossSessionBoundary` pins the session-boundary case alongside it.
+  - Edge case left alone for now: if the operator manually deletes a `.session` divider via `recordingLogRemove`, the supersede flags on flubs in the surrounding sessions don't recompute. Consistent with the existing "remove a retake → prior flubs stay marked" behavior — supersede is intent at the moment of insertion. A future iteration could revisit if this ever surprises an editor.
 
 ### 2026-05-11 — Task: operator-ergonomics — Show a progress indicator: 'NN% through script • ~MM min remaining at current speed'
 

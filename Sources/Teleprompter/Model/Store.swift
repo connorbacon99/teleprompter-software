@@ -113,8 +113,11 @@ func reduce(state: AppState, action: Action) -> AppState {
             if entry.kind == .retake {
                 let log = s.scripts[idx].recordingLog
                 let retakeIdx = log.count - 1
-                let chapterIdx = log[..<retakeIdx].lastIndex(where: { $0.kind == .chapter })
-                let windowStart = chapterIdx.map { $0 + 1 } ?? 0
+                // The window is bounded by the most recent `.chapter` OR
+                // `.session` divider — both act as hard scopes so a retake
+                // never reaches back across a session boundary or chapter.
+                let boundaryIdx = log[..<retakeIdx].lastIndex(where: { $0.kind == .chapter || $0.kind == .session })
+                let windowStart = boundaryIdx.map { $0 + 1 } ?? 0
                 if windowStart < retakeIdx {
                     for i in windowStart..<retakeIdx where s.scripts[idx].recordingLog[i].kind == .flub {
                         s.scripts[idx].recordingLog[i].superseded = true

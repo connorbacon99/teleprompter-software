@@ -429,6 +429,105 @@ final class ReducerTests: XCTestCase {
         XCTAssertEqual(zeroDistance, "0% through script • ~? min remaining at current speed")
     }
 
+    // MARK: - Session-divider row (operator-ergonomics)
+
+    func testSessionDividerLabelFormatsSessionNumberAndWallclock() {
+        var comps = DateComponents()
+        comps.year = 2026; comps.month = 5; comps.day = 11
+        comps.hour = 14; comps.minute = 30; comps.second = 7
+        let date = Calendar.current.date(from: comps)!
+        // First divider = priorCount 0 → opens Session 2 (the implicit
+        // first session of entries before any divider is Session 1).
+        XCTAssertEqual(
+            TrackerView.sessionDividerLabel(priorDividerCount: 0, wallclock: date),
+            "Session 2 started 2026-05-11 14:30:07"
+        )
+        // Second divider opens Session 3, etc.
+        XCTAssertEqual(
+            TrackerView.sessionDividerLabel(priorDividerCount: 1, wallclock: date),
+            "Session 3 started 2026-05-11 14:30:07"
+        )
+        XCTAssertEqual(
+            TrackerView.sessionDividerLabel(priorDividerCount: 4, wallclock: date),
+            "Session 6 started 2026-05-11 14:30:07"
+        )
+    }
+
+    func testRetakeDoesNotSupersedeFlubsAcrossSessionBoundary() {
+        // A retake in session N must not reach back across a `.session`
+        // divider to supersede flubs in session N-1. This is the whole
+        // point of treating the divider as a chapter-equivalent boundary.
+        var state = AppState.initial()
+        let scriptId = state.activeScriptId
+
+        let flubA = RecordingLogEntry(id: UUID(), timeSeconds: 1, line: "session 1 flub", note: "", kind: .flub)
+        let divider = RecordingLogEntry(id: UUID(), timeSeconds: 0, line: "Session 2 started ...", note: "", kind: .session)
+        let flubB = RecordingLogEntry(id: UUID(), timeSeconds: 1, line: "session 2 flub", note: "", kind: .flub)
+        let retake = RecordingLogEntry(id: UUID(), timeSeconds: 2, line: "session 2 retake", note: "", kind: .retake)
+
+        for e in [flubA, divider, flubB, retake] {
+            state = reduce(state: state, action: .recordingLogAdd(scriptId: scriptId, entry: e))
+        }
+
+        let log = state.activeScript?.recordingLog ?? []
+        XCTAssertEqual(log.count, 4)
+        XCTAssertFalse(log[0].superseded, "session-1 flub must stay live — the .session divider is a hard boundary")
+        XCTAssertFalse(log[1].superseded, "the divider itself must stay live")
+        XCTAssertTrue(log[2].superseded, "session-2 flub before the retake must be superseded")
+        XCTAssertFalse(log[3].superseded, "retake stays live")
+    }
+
+    func testCSVExportRendersSessionDividerRow() {
+        let dividerDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let entries: [RecordingLogEntry] = [
+            RecordingLogEntry(id: UUID(), timeSeconds: 4, line: "before reset", note: "", kind: .flub, wallclock: dividerDate),
+            RecordingLogEntry(
+                id: UUID(), timeSeconds: 0,
+                line: "Session 2 started 2026-05-11 14:30:07",
+                note: "", kind: .session, wallclock: dividerDate
+            ),
+            RecordingLogEntry(id: UUID(), timeSeconds: 1, line: "after reset", note: "", kind: .flub, wallclock: dividerDate),
+        ]
+        let csv = TrackerView.csvText(for: entries, moduleName: "Module B")
+        let lines = csv.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+        XCTAssertEqual(lines.count, 4, "header + three rows")
+
+        // Header is unchanged from before — session rows render through the
+        // standard column layout with kind=Session and the divider label in
+        // the line column.
+        XCTAssertEqual(lines[0], "Module,Time,Wallclock,Kind,Status,Line,Note")
+        // The divider row carries kind "Session" and the human-readable label.
+        // Splitting on commas works here because the divider's line text
+        // doesn't contain a comma.
+        let dividerFields = lines[2].split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+        XCTAssertEqual(dividerFields[3], "Session")
+        XCTAssertEqual(dividerFields[4], "live")
+        XCTAssertEqual(dividerFields[5], "Session 2 started 2026-05-11 14:30:07")
+    }
+
+    func testTrackerResetWithEntriesInsertsSessionDividerThenIdle() {
+        // End-to-end: with at least one prior log entry, hitting Reset must
+        // append a synthetic .session entry to the log. We simulate the
+        // confirmed-reset path by dispatching the same action the
+        // applyResetWithDivider helper dispatches, since the alert flow
+        // can't run headlessly.
+        var initial = AppState.initial()
+        let scriptId = initial.activeScriptId
+        let prior = RecordingLogEntry(id: UUID(), timeSeconds: 5, line: "flub before reset", note: "", kind: .flub)
+        initial = reduce(state: initial, action: .recordingLogAdd(scriptId: scriptId, entry: prior))
+
+        let now = Date()
+        let label = TrackerView.sessionDividerLabel(priorDividerCount: 0, wallclock: now)
+        let divider = RecordingLogEntry(id: UUID(), timeSeconds: 0, line: label, note: "", kind: .session, wallclock: now)
+        let after = reduce(state: initial, action: .recordingLogAdd(scriptId: scriptId, entry: divider))
+
+        let log = after.activeScript?.recordingLog ?? []
+        XCTAssertEqual(log.count, 2)
+        XCTAssertEqual(log[0].kind, .flub)
+        XCTAssertEqual(log[1].kind, .session)
+        XCTAssertTrue(log[1].line.hasPrefix("Session 2 started"))
+    }
+
     func testProgressIndicatorTextClampsPositionOutsideUnitInterval() {
         // Defensive: callers passing slightly-negative or >1 positions should not
         // produce "-3% through script" or remaining < 0.

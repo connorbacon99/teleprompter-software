@@ -12,6 +12,12 @@ enum EntryKind: String, Codable, CaseIterable {
     case chapter
     case retake
     case note
+    /// Synthetic divider inserted by the recording-timer reset. Acts like a
+    /// chapter boundary for the supersede logic (a retake in session N must
+    /// not flip flubs in session N-1) and renders as a header row in the
+    /// tracker table rather than a regular log line. Not operator-selectable
+    /// via the Kind popup.
+    case session
 }
 
 struct RecordingLogEntry: Codable, Equatable, Identifiable {

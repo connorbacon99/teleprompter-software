@@ -150,7 +150,7 @@ tasks depend on. Always work the topmost task with `"passes": false`.
       "Render the divider row visually distinct (different background, larger row height, or a header-style font)",
       "CSV export should also reflect the divider — either as a blank row with a 'Session N started <wallclock>' note, or by writing per-session CSV sections"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "stability",
