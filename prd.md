@@ -130,7 +130,7 @@ tasks depend on. Always work the topmost task with `"passes": false`.
       "Make sure typing 'B' inside the script editor or notes field still types a literal 'B' — only hot-route when the operator window is key and no text field has focus",
       "Add a brief HUD-style flash or label change confirming the bookmark was added (e.g., status label shows 'Bookmark added' for 1.5s)"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "operator-ergonomics",

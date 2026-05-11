@@ -2,8 +2,8 @@
 
 ## Current Status
 **Last Updated:** 2026-05-11
-**Tasks Completed:** 7
-**Current Task:** None (next: operator-ergonomics — add a bookmark hotkey (B) that adds a cue marker at the current scroll position)
+**Tasks Completed:** 8
+**Current Task:** None (next: operator-ergonomics — Show a progress indicator: 'NN% through script • ~MM min remaining at current speed')
 
 ---
 
@@ -115,6 +115,22 @@ Format:
 - **Manual smoke (UI):** Launch the app, then activate any other app (Finder, Safari, the camera control app). Press ⌃⌥F. Switch back to the operator window's Tracker tab; a new entry of kind "Flub" should be at the bottom of the table, time stamped at the live recording-timer elapsed value (or 0:00 if the timer was idle), with the paragraph at the current scroll position captured into the Line column. If another app has registered ⌃⌥F system-wide, the registration will fail silently — check the console for "RegisterEventHotKey for ⌃⌥F failed" — and the in-app Log line button remains the fallback.
 - **Notes:** Carbon's `RegisterEventHotKey` is the right primitive here per the PRD — it's deprecated on paper but still works on Catalina+ and does not require accessibility entitlements, which would complicate distribution. The 'TELE' (0x54454C45) hotkey signature is unique per app per Apple's documentation. The Carbon-handler → notification indirection means TrackerView doesn't need to know anything about Carbon, and a future "tracker view not yet built" startup state simply means no observer to fire — registration still succeeds, the notification gets posted to nobody, no crash.
   - Per the task description "active whenever the operator window is open": in this codebase the operator window opens during `applicationDidFinishLaunching` and closing it terminates the app (per `applicationShouldTerminateAfterLastWindowClosed`), so registering at launch / unregistering at terminate exactly matches that lifecycle. If a future task makes the operator window closable-without-quitting we'll need to gate registration on the willClose/becameVisible notifications instead.
+
+### 2026-05-11 — Task: operator-ergonomics — Add a bookmark hotkey (B) that adds a cue marker at the current scroll position
+
+- **Files changed:**
+  - `Sources/Teleprompter/Operator/TrackerView.swift` — added `static bookmarkLabel(elapsedSeconds:wallclock:)` that returns `"Bookmark H:MM:SS"` when a session timer value is supplied (≥ 0) and falls back to `"Bookmark HH:MM:SS"` from a wallclock formatter (local timezone) otherwise. Added a public `currentRecordingElapsedSeconds()` accessor that wraps the existing private `currentElapsedSeconds()` and returns nil for both `.idle` and countdown (negative) — so the bookmark hotkey only stamps a timer value when the session is actually past 0:00.
+  - `Sources/Teleprompter/Operator/OperatorViewController.swift` — added `case 11` ('B') to the existing local keyDown monitor. Guards: returns the event through when Control or Option is held (so Ctrl+B/Opt+B can still map elsewhere — plain B and Shift+B both bookmark), and when the window's first responder is any `NSText` (catches the script editor's NSTextView, the tracker line/note field editors, and the tab-bar rename field — typing 'B' in any text input still produces a literal 'B'). New `addBookmarkAtCurrentPosition()` reads the live `engine.currentPosition`, asks the trackerView for its elapsed seconds, builds the label, and dispatches `cueAdd`. New `flashBookmarkConfirmation(label:)` lazily creates a centered, semi-transparent HUD label pinned to bottom-of-window, sets it to `"   Added: Bookmark H:MM:SS   "`, and arms a 1.5 s Timer to hide it. Re-pressing 'B' replaces the label and restarts the timer instead of stacking. Stored on the VC: `bookmarkFlashLabel` and `bookmarkFlashTimer`; the timer is invalidated in `deinit`.
+  - `Tests/TeleprompterTests/ReducerTests.swift` — added `testBookmarkLabelFormatsElapsedSecondsAsHMS` (covers 0, 5, 90, 3600, 3661, and verifies fractional seconds truncate not round), `testBookmarkLabelFallsBackToWallclockWhenTimerNotRunning` (constructs a specific local-time `Date` via `DateComponents` so the assertion is timezone-stable, and confirms countdown / negative elapsed also falls back to wallclock), and `testCueAddAppendsAndSortsByPosition` (three out-of-order bookmarks → cues sorted by position).
+- **Commands:**
+  - `swift build` → success.
+  - `swift test` → **18/18 passing** (15 prior + 3 new).
+- **Tests added:** `Tests/TeleprompterTests/ReducerTests.swift`
+  - `testBookmarkLabelFormatsElapsedSecondsAsHMS`
+  - `testBookmarkLabelFallsBackToWallclockWhenTimerNotRunning`
+  - `testCueAddAppendsAndSortsByPosition`
+- **Manual smoke (UI):** Launch the app. With the operator window key and no text field focused, press B — a centered HUD pill near the bottom of the operator window shows "Added: Bookmark …" for 1.5 s; switch to the Monitor view's cue list (if surfaced) or restart the app and inspect `state.json` for the new entry in the active script's `cues` array. Also: click into the editor and type "BBBB" — it must produce four literal B's, not four bookmarks. Same test from inside a tracker line/note text field, and from inside the tab-bar rename field.
+- **Notes:** Existing pre-switch guard `firstResponder === editorTextView` only filters the script editor — Space/arrows/Home/End in tracker text fields still get intercepted today (latent issue, not in this task's scope). I added the broader `is NSText` check inline in the new `case 11` so the bookmark hotkey alone gets the right gating without changing behavior of the other keys. If the next iteration touches this monitor, lifting that `is NSText` check up above the switch would fix the existing latent issue for all keys; I left it alone to keep this change tight. The HUD label is a child of the VC's root view, so it overlays whichever tab (Editor/Monitor/Tracker) is visible — that's the intended behavior since the bookmark hotkey is global to the operator window. Format note: timer-based labels use `H:MM:SS` (no leading zero on hours — `0:01:30` for 90 s, `1:01:01` for 3661 s); wallclock fallback uses `HH:mm:ss`. Matched the existing CSV time format style (no leading zero on minutes) where reasonable, but went with always-three-segments (H:MM:SS) so the label stays readable as a Premiere/FCP marker name once those export tasks land. `DateFormatter` for the wallclock is cached at module load (thread-safe per Apple docs for read-only use).
 
 ### 2026-05-11 — Task: edit-tracking — Auto-supersede flub entries when a retake-from-here is logged
 

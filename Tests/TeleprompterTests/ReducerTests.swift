@@ -318,6 +318,42 @@ final class ReducerTests: XCTestCase {
         XCTAssertFalse(log.first?.line.isEmpty ?? true, "the new entry should capture the paragraph at the current scroll position")
     }
 
+    func testBookmarkLabelFormatsElapsedSecondsAsHMS() {
+        let any = Date()
+        XCTAssertEqual(TrackerView.bookmarkLabel(elapsedSeconds: 0, wallclock: any), "Bookmark 0:00:00")
+        XCTAssertEqual(TrackerView.bookmarkLabel(elapsedSeconds: 5, wallclock: any), "Bookmark 0:00:05")
+        XCTAssertEqual(TrackerView.bookmarkLabel(elapsedSeconds: 90, wallclock: any), "Bookmark 0:01:30")
+        XCTAssertEqual(TrackerView.bookmarkLabel(elapsedSeconds: 3600, wallclock: any), "Bookmark 1:00:00")
+        XCTAssertEqual(TrackerView.bookmarkLabel(elapsedSeconds: 3661, wallclock: any), "Bookmark 1:01:01")
+        // Fractional seconds truncate (don't round) — matches Time column behavior in the table.
+        XCTAssertEqual(TrackerView.bookmarkLabel(elapsedSeconds: 11.7, wallclock: any), "Bookmark 0:00:11")
+    }
+
+    func testBookmarkLabelFallsBackToWallclockWhenTimerNotRunning() {
+        var comps = DateComponents()
+        comps.year = 2024; comps.month = 6; comps.day = 15
+        comps.hour = 14; comps.minute = 35; comps.second = 7
+        let date = Calendar.current.date(from: comps)!
+        XCTAssertEqual(TrackerView.bookmarkLabel(elapsedSeconds: nil, wallclock: date), "Bookmark 14:35:07")
+
+        // Negative elapsed (countdown still ticking down) also falls back to wallclock,
+        // because the session timer hasn't reached 0:00 yet.
+        XCTAssertEqual(TrackerView.bookmarkLabel(elapsedSeconds: -2.4, wallclock: date), "Bookmark 14:35:07")
+    }
+
+    func testCueAddAppendsAndSortsByPosition() {
+        var state = AppState.initial()
+        let scriptId = state.activeScriptId
+        state = reduce(state: state, action: .cueAdd(scriptId: scriptId, label: "Bookmark 0:01:00", position: 0.5))
+        state = reduce(state: state, action: .cueAdd(scriptId: scriptId, label: "Bookmark 0:00:30", position: 0.2))
+        state = reduce(state: state, action: .cueAdd(scriptId: scriptId, label: "Bookmark 0:02:00", position: 0.9))
+
+        let cues = state.activeScript?.cues ?? []
+        XCTAssertEqual(cues.count, 3)
+        XCTAssertEqual(cues.map { $0.position }, [0.2, 0.5, 0.9], "cues must be sorted by position so the bookmark hotkey stays usable as a marker list")
+        XCTAssertEqual(cues.map { $0.label }, ["Bookmark 0:00:30", "Bookmark 0:01:00", "Bookmark 0:02:00"])
+    }
+
     func testNonRecordingLogActionDoesNotTriggerSynchronousPersistence() throws {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("teleprompter-no-immediate-save-\(UUID().uuidString)", isDirectory: true)

@@ -37,6 +37,8 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
     private var keyMonitor: Any?
     private var lastPlayingState: Bool = false
     private var positionPollTimer: Timer?
+    private var bookmarkFlashLabel: NSTextField?
+    private var bookmarkFlashTimer: Timer?
 
     init(store: Store, engine: PlaybackEngine) {
         self.store = store
@@ -313,6 +315,21 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
             case 119: // End
                 self.store.dispatch(.setPosition(1))
                 return nil
+            case 11: // 'B' — bookmark current scroll position as a cue marker
+                // Bookmark only on unmodified B (shift is fine — that's still
+                // a literal 'B'). Control/Option may map to other shortcuts.
+                let blockers: NSEvent.ModifierFlags = [.control, .option]
+                if !event.modifierFlags.intersection(blockers).isEmpty {
+                    return event
+                }
+                // Don't steal 'B' from any text input — the script editor, the
+                // tracker line/note fields, the tab-bar rename field all use
+                // an NSText-derived first responder while accepting keystrokes.
+                if let resp = self.view.window?.firstResponder, resp is NSText {
+                    return event
+                }
+                self.addBookmarkAtCurrentPosition()
+                return nil
             default:
                 return event
             }
@@ -333,6 +350,7 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
         if let token = subscriptionToken { store.unsubscribe(token) }
         if let monitor = keyMonitor { NSEvent.removeMonitor(monitor) }
         positionPollTimer?.invalidate()
+        bookmarkFlashTimer?.invalidate()
     }
 
     /// Live animated position of the operator's monitor preview. AppDelegate
@@ -422,6 +440,54 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
             delegate.closeTeleprompter()
         } else {
             delegate.openTeleprompter()
+        }
+    }
+
+    private func addBookmarkAtCurrentPosition() {
+        guard let scriptId = store.state.activeScript?.id else { return }
+        let elapsed = trackerView.currentRecordingElapsedSeconds()
+        let label = TrackerView.bookmarkLabel(elapsedSeconds: elapsed, wallclock: Date())
+        let position = engine.currentPosition
+        store.dispatch(.cueAdd(scriptId: scriptId, label: label, position: position))
+        flashBookmarkConfirmation(label: label)
+    }
+
+    /// Brief HUD-style overlay confirming a bookmark was added. Re-pressing
+    /// 'B' before the 1.5s timer expires replaces the label and restarts the
+    /// timer — so a flurry of bookmarks shows the most recent one for the
+    /// configured dwell time instead of disappearing too fast.
+    private func flashBookmarkConfirmation(label: String) {
+        let field: NSTextField
+        if let existing = bookmarkFlashLabel {
+            field = existing
+        } else {
+            field = NSTextField(labelWithString: "")
+            field.translatesAutoresizingMaskIntoConstraints = false
+            field.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+            field.textColor = NSColor(white: 0.98, alpha: 1)
+            field.drawsBackground = true
+            field.backgroundColor = NSColor(white: 0.0, alpha: 0.78)
+            field.isBezeled = false
+            field.isEditable = false
+            field.isSelectable = false
+            field.alignment = .center
+            field.wantsLayer = true
+            field.layer?.cornerRadius = 6
+            field.layer?.masksToBounds = true
+            view.addSubview(field)
+            NSLayoutConstraint.activate([
+                field.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                field.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -24),
+                field.heightAnchor.constraint(equalToConstant: 28),
+                field.widthAnchor.constraint(greaterThanOrEqualToConstant: 220)
+            ])
+            bookmarkFlashLabel = field
+        }
+        field.stringValue = "   Added: \(label)   "
+        field.isHidden = false
+        bookmarkFlashTimer?.invalidate()
+        bookmarkFlashTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { [weak self] _ in
+            self?.bookmarkFlashLabel?.isHidden = true
         }
     }
 

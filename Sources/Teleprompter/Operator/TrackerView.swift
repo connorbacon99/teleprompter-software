@@ -258,6 +258,14 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
         }
     }
 
+    /// Public accessor for the live recording-session elapsed time, in
+    /// seconds. Returns nil if the timer is idle or still counting down — in
+    /// either case the bookmark hotkey falls back to wallclock for its label.
+    func currentRecordingElapsedSeconds() -> Double? {
+        guard let s = currentElapsedSeconds(), s >= 0 else { return nil }
+        return s
+    }
+
     private func updateTimerDisplay() {
         guard let elapsed = currentElapsedSeconds() else {
             timerLabel.stringValue = "0:00"
@@ -586,6 +594,28 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
         case .note: return "Note"
         }
     }
+
+    /// Build the label that the bookmark hotkey stamps onto its cue marker.
+    /// If a recording session is live (elapsed ≥ 0) we use the session timer
+    /// in `H:MM:SS` form so multiple sessions in the same shoot don't collide.
+    /// Otherwise we fall back to the wallclock time-of-day so the operator
+    /// still gets a human-readable label when the timer hasn't been started.
+    static func bookmarkLabel(elapsedSeconds: Double?, wallclock: Date) -> String {
+        if let elapsed = elapsedSeconds, elapsed >= 0 {
+            let total = Int(elapsed.rounded(.down))
+            let h = total / 3600
+            let m = (total % 3600) / 60
+            let s = total % 60
+            return String(format: "Bookmark %d:%02d:%02d", h, m, s)
+        }
+        return "Bookmark " + bookmarkWallclockFormatter.string(from: wallclock)
+    }
+
+    private static let bookmarkWallclockFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
 }
 
 // MARK: - Inline editing
