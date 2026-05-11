@@ -30,6 +30,33 @@ final class ReducerTests: XCTestCase {
         XCTAssertEqual(mid.playback.position, 0.42, accuracy: 1e-9)
     }
 
+    func testPersistenceLoadFromCorruptFileReturnsNilAndBacksUp() throws {
+        let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("teleprompter-persistence-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        let badFile = tmpDir.appendingPathComponent("state.json")
+        try Data("this is not json {".utf8).write(to: badFile)
+
+        let result = Persistence.loadFrom(url: badFile)
+        XCTAssertNil(result, "corrupt state.json must decode to nil instead of throwing")
+
+        let siblings = try FileManager.default.contentsOfDirectory(atPath: tmpDir.path)
+        let backups = siblings.filter { $0.hasPrefix("state.json.bak.") }
+        XCTAssertEqual(backups.count, 1, "corrupt load must produce exactly one backup file; got \(siblings)")
+
+        // The original bad file should still be present alongside the backup
+        // (we copy, not move, so the next save can overwrite it cleanly).
+        XCTAssertTrue(FileManager.default.fileExists(atPath: badFile.path))
+    }
+
+    func testPersistenceLoadFromMissingFileReturnsNilSilently() {
+        let missing = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("teleprompter-missing-\(UUID().uuidString).json")
+        XCTAssertNil(Persistence.loadFrom(url: missing))
+    }
+
     func testRecordingLogAddAppendsEntry() {
         var state = AppState.initial()
         let scriptId = state.activeScriptId

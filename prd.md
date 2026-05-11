@@ -60,7 +60,7 @@ tasks depend on. Always work the topmost task with `"passes": false`.
       "Log the failure via NSLog with the underlying error",
       "Add a unit test that writes garbage to a temp URL, calls a testable version of the load logic, and confirms it returns nil + creates the backup file"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "stability",

@@ -2,8 +2,8 @@
 
 ## Current Status
 **Last Updated:** 2026-05-11
-**Tasks Completed:** 1
-**Current Task:** None (next: stability — resilient Persistence.load)
+**Tasks Completed:** 2
+**Current Task:** None (next: stability — persist recording-log mutations immediately)
 
 ---
 
@@ -40,3 +40,16 @@ Format:
   - `testRecordingLogAddAppendsEntry`
 - **Manual verification the human should run before shipping:** install Xcode (or use a machine that has it), then from the repo root run `swift test` — all three reducer tests should pass. This is the only way to confirm `swift test` works end-to-end on this codebase from now on.
 - **Notes:** Because Command Line Tools alone don't include XCTest, the ralph loop running on this exact machine cannot execute `swift test`. Every subsequent task that asks "add a unit test" can still write the test (the test target compiles fine structurally), but it can only be executed on a machine with Xcode. Future iterations should still add the tests as the PRD requires.
+
+### 2026-05-11 — Task: stability — Make Persistence.load() resilient to corrupt state.json
+
+- **Files changed:**
+  - `Sources/Teleprompter/Model/Persistence.swift` — extracted a testable `loadFrom(url:)` static method. On `JSONDecoder` failure it copies the bad file to `<name>.bak.<unix-timestamp>` in the same directory, NSLogs the underlying error, and returns nil. Missing/unreadable files still return nil silently (no spurious backup). `load()` now delegates to `loadFrom(url: fileURL)`.
+  - `Tests/TeleprompterTests/ReducerTests.swift` — added `testPersistenceLoadFromCorruptFileReturnsNilAndBacksUp` (writes garbage to a tmpdir, asserts `loadFrom` returns nil and creates exactly one `state.json.bak.*` sibling) and `testPersistenceLoadFromMissingFileReturnsNilSilently` (no file present → nil, no backup).
+- **Commands:**
+  - `swift build` → success.
+  - `swift test` → **5/5 passing** (3 prior reducer tests + 2 new persistence tests). XCTest is actually available on this machine after all; the prior iteration's note was wrong.
+- **Tests added:** `Tests/TeleprompterTests/ReducerTests.swift`
+  - `testPersistenceLoadFromCorruptFileReturnsNilAndBacksUp`
+  - `testPersistenceLoadFromMissingFileReturnsNilSilently`
+- **Notes:** Backup uses `copyItem` rather than `moveItem` so the original `state.json` stays in place; the next `save()` will overwrite it atomically. This avoids a window where the app is running with no state file at all (which would also be safe given the rest of the code, but the copy semantics are easier to reason about). Timestamp resolution is per-second — two corrupt loads in the same second would collide, but in practice load only happens once per launch, so a UUID suffix would be over-engineering.

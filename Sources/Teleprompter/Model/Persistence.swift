@@ -24,8 +24,36 @@ enum Persistence {
     }
 
     static func load() -> Snapshot? {
-        guard let data = try? Data(contentsOf: fileURL) else { return nil }
-        return try? JSONDecoder().decode(Snapshot.self, from: data)
+        return loadFrom(url: fileURL)
+    }
+
+    /// Testable variant of `load()`. Reads the file at `url`, attempts to
+    /// decode it as a `Snapshot`, and on decode failure copies the bad file
+    /// to `<url>.bak.<unix-timestamp>` in the same directory before
+    /// returning nil. Missing/unreadable files return nil silently.
+    static func loadFrom(url: URL) -> Snapshot? {
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            // No file (or unreadable) — treat as "no saved state".
+            return nil
+        }
+        do {
+            return try JSONDecoder().decode(Snapshot.self, from: data)
+        } catch {
+            NSLog("[Persistence] decode failed for \(url.path): \(error)")
+            let timestamp = Int(Date().timeIntervalSince1970)
+            let backupURL = url.deletingLastPathComponent()
+                .appendingPathComponent("\(url.lastPathComponent).bak.\(timestamp)")
+            do {
+                try FileManager.default.copyItem(at: url, to: backupURL)
+                NSLog("[Persistence] corrupt state backed up to \(backupURL.path)")
+            } catch {
+                NSLog("[Persistence] backup copy failed: \(error)")
+            }
+            return nil
+        }
     }
 
     static func save(_ snapshot: Snapshot) {
