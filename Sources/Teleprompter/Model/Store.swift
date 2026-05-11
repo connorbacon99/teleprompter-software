@@ -4,6 +4,7 @@ import QuartzCore
 final class Store {
     private(set) var state: AppState
     private var observers: [(token: UUID, callback: (AppState) -> Void)] = []
+    private var actionObservers: [(token: UUID, callback: (AppState, Action) -> Void)] = []
 
     init(initialState: AppState) {
         self.state = initialState
@@ -21,10 +22,29 @@ final class Store {
         observers.removeAll { $0.token == token }
     }
 
+    /// Subscribe to dispatched actions. Unlike `subscribe`, this is NOT
+    /// invoked on subscription (there's no action yet) — only on subsequent
+    /// `dispatch` calls. Use this when the persistence/side-effect behavior
+    /// depends on which action fired (e.g. recording-log mutations save
+    /// synchronously, other mutations debounce).
+    @discardableResult
+    func subscribeActions(_ callback: @escaping (AppState, Action) -> Void) -> UUID {
+        let token = UUID()
+        actionObservers.append((token, callback))
+        return token
+    }
+
+    func unsubscribeActions(_ token: UUID) {
+        actionObservers.removeAll { $0.token == token }
+    }
+
     func dispatch(_ action: Action) {
         state = reduce(state: state, action: action)
         for (_, callback) in observers {
             callback(state)
+        }
+        for (_, callback) in actionObservers {
+            callback(state, action)
         }
     }
 }

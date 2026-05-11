@@ -76,4 +76,95 @@ final class ReducerTests: XCTestCase {
         XCTAssertEqual(state.activeScript?.recordingLog.first?.line, "the line where we restarted")
         XCTAssertEqual(state.activeScript?.recordingLog.first?.note, "flubbed it")
     }
+
+    func testRecordingLogActionsAreFlaggedForImmediatePersistence() {
+        // Every recording-log mutation must opt into the synchronous save
+        // path. If you add a new one to Action, update isRecordingLogMutation
+        // and this test in the same change.
+        let entry = RecordingLogEntry(id: UUID(), timeSeconds: 0, line: "", note: "")
+        let scriptId = UUID()
+        let entryId = UUID()
+        let logActions: [Action] = [
+            .recordingLogAdd(scriptId: scriptId, entry: entry),
+            .recordingLogUpdateLine(scriptId: scriptId, entryId: entryId, line: "x"),
+            .recordingLogUpdateNote(scriptId: scriptId, entryId: entryId, note: "x"),
+            .recordingLogRemove(scriptId: scriptId, entryId: entryId),
+            .recordingLogClear(scriptId: scriptId),
+        ]
+        for action in logActions {
+            XCTAssertTrue(action.isRecordingLogMutation, "\(action) must be flagged for immediate save")
+        }
+
+        let nonLogActions: [Action] = [
+            .scriptAdd(name: "x", content: "y"),
+            .play,
+            .pause,
+            .setPosition(0.5),
+            .setSpeed(1.5),
+            .setFontSize(64),
+            .setMirror(true),
+            .cueAdd(scriptId: scriptId, label: "x", position: 0.5),
+        ]
+        for action in nonLogActions {
+            XCTAssertFalse(action.isRecordingLogMutation, "\(action) must NOT be flagged for immediate save")
+        }
+    }
+
+    /// Invariant under test: a log entry, once dispatched, survives an
+    /// immediate process kill. We simulate the AppDelegate wiring with a
+    /// store action-observer that writes synchronously for recording-log
+    /// mutations, then read the file back to confirm the entry is there.
+    /// No debounce timer is given the chance to fire.
+    func testRecordingLogActionTriggersSynchronousPersistence() throws {
+        let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("teleprompter-immediate-save-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+        let file = tmpDir.appendingPathComponent("state.json")
+
+        let store = Store(initialState: AppState.initial())
+        store.subscribeActions { state, action in
+            guard action.isRecordingLogMutation else { return }
+            Persistence.saveTo(.init(
+                scripts: state.scripts,
+                activeScriptId: state.activeScriptId,
+                appearance: state.appearance
+            ), url: file)
+        }
+
+        let scriptId = store.state.activeScriptId
+        let entry = RecordingLogEntry(id: UUID(), timeSeconds: 5, line: "first words after the flub", note: "retake")
+        store.dispatch(.recordingLogAdd(scriptId: scriptId, entry: entry))
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path), "recording-log mutation must write to disk before dispatch returns")
+
+        let snap = Persistence.loadFrom(url: file)
+        XCTAssertEqual(snap?.scripts.first?.recordingLog.count, 1)
+        XCTAssertEqual(snap?.scripts.first?.recordingLog.first?.id, entry.id)
+        XCTAssertEqual(snap?.scripts.first?.recordingLog.first?.line, "first words after the flub")
+    }
+
+    func testNonRecordingLogActionDoesNotTriggerSynchronousPersistence() throws {
+        let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("teleprompter-no-immediate-save-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+        let file = tmpDir.appendingPathComponent("state.json")
+
+        let store = Store(initialState: AppState.initial())
+        store.subscribeActions { state, action in
+            guard action.isRecordingLogMutation else { return }
+            Persistence.saveTo(.init(
+                scripts: state.scripts,
+                activeScriptId: state.activeScriptId,
+                appearance: state.appearance
+            ), url: file)
+        }
+
+        store.dispatch(.setFontSize(80))
+        store.dispatch(.setPosition(0.5))
+        store.dispatch(.scriptSetContent(id: store.state.activeScriptId, content: "typing typing typing"))
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path), "non-log mutations must not trip the immediate-save path; they go through the debounce")
+    }
 }

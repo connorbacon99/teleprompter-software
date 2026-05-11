@@ -136,3 +136,21 @@ enum Action {
 
     case projectLoad(AppState)
 }
+
+extension Action {
+    /// True for actions that mutate a script's `recordingLog`. Invariant:
+    /// once a recording-log action has been dispatched it must survive an
+    /// immediate process kill, so `AppDelegate` persists synchronously for
+    /// these (no 500ms debounce). The reason is the human operator: a flub
+    /// logged at hour 11 of a 12h shoot can't be re-derived from anything
+    /// else if the app dies before the debounce fires.
+    var isRecordingLogMutation: Bool {
+        switch self {
+        case .recordingLogAdd, .recordingLogUpdateLine, .recordingLogUpdateNote,
+             .recordingLogRemove, .recordingLogClear:
+            return true
+        default:
+            return false
+        }
+    }
+}

@@ -35,8 +35,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         store.subscribe { [weak self] state in
             self?.applyEngineFromState(state)
         }
-        store.subscribe { [weak self] state in
-            self?.schedulePersistenceSave(state)
+        store.subscribeActions { [weak self] state, action in
+            self?.persistenceSaveAfter(action: action, state: state)
         }
 
         refreshDisplays()
@@ -133,10 +133,23 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
     }
 
-    private func schedulePersistenceSave(_ state: AppState) {
-        // Debounce so rapid edits (e.g. typing in the editor) don't thrash
-        // the disk. 500ms is short enough that no realistic crash window
-        // loses meaningful work.
+    private func persistenceSaveAfter(action: Action, state: AppState) {
+        // Recording-log mutations save synchronously: a flub logged at hour 11
+        // of a 12h shoot must survive an immediate process kill, so we can't
+        // wait out the 500ms debounce window.
+        if action.isRecordingLogMutation {
+            persistenceSaveTimer?.invalidate()
+            persistenceSaveTimer = nil
+            Persistence.save(.init(
+                scripts: state.scripts,
+                activeScriptId: state.activeScriptId,
+                appearance: state.appearance
+            ))
+            return
+        }
+        // Everything else (typing in the editor, appearance tweaks, etc.)
+        // debounces so rapid edits don't thrash the disk. 500ms is short
+        // enough that no realistic crash window loses meaningful work.
         persistenceSaveTimer?.invalidate()
         persistenceSaveTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
             guard let self = self else { return }

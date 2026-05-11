@@ -57,11 +57,16 @@ enum Persistence {
     }
 
     static func save(_ snapshot: Snapshot) {
+        saveTo(snapshot, url: fileURL)
+    }
+
+    /// Testable variant of `save()`. Writes the snapshot to `url` atomically.
+    static func saveTo(_ snapshot: Snapshot, url: URL) {
         do {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(snapshot)
-            try data.write(to: fileURL, options: .atomic)
+            try data.write(to: url, options: .atomic)
         } catch {
             NSLog("[Persistence] save failed: \(error)")
         }

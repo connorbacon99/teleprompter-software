@@ -71,7 +71,7 @@ tasks depend on. Always work the topmost task with `"passes": false`.
       "Confirm the existing debounced save still applies to other state changes (typing in the script editor, appearance tweaks)",
       "Add a unit test or comment block explaining the invariant: 'a log entry, once dispatched, survives an immediate process kill'"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "edit-tracking",

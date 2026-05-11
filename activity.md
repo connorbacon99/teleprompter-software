@@ -2,8 +2,8 @@
 
 ## Current Status
 **Last Updated:** 2026-05-11
-**Tasks Completed:** 2
-**Current Task:** None (next: stability — persist recording-log mutations immediately)
+**Tasks Completed:** 3
+**Current Task:** None (next: edit-tracking — add EntryKind field to RecordingLogEntry)
 
 ---
 
@@ -53,3 +53,20 @@ Format:
   - `testPersistenceLoadFromCorruptFileReturnsNilAndBacksUp`
   - `testPersistenceLoadFromMissingFileReturnsNilSilently`
 - **Notes:** Backup uses `copyItem` rather than `moveItem` so the original `state.json` stays in place; the next `save()` will overwrite it atomically. This avoids a window where the app is running with no state file at all (which would also be safe given the rest of the code, but the copy semantics are easier to reason about). Timestamp resolution is per-second — two corrupt loads in the same second would collide, but in practice load only happens once per launch, so a UUID suffix would be over-engineering.
+
+### 2026-05-11 — Task: stability — Persist recording-log mutations immediately, not just on the 500ms debounce
+
+- **Files changed:**
+  - `Sources/Teleprompter/Model/Store.swift` — added `subscribeActions` / `unsubscribeActions` and an `actionObservers` list. `dispatch` now fans out to both state observers (existing) and action observers (new) in that order. Action observers receive `(AppState, Action)` and are NOT invoked on subscribe (no action yet).
+  - `Sources/Teleprompter/Model/AppState.swift` — added `Action.isRecordingLogMutation` computed property covering `recordingLogAdd`, `recordingLogUpdateLine`, `recordingLogUpdateNote`, `recordingLogRemove`, and `recordingLogClear`. Doc-comment captures the invariant: a flub at hour 11 of a 12h shoot must survive an immediate process kill.
+  - `Sources/Teleprompter/Model/Persistence.swift` — extracted a testable `saveTo(_:url:)` static method that writes the snapshot atomically to an arbitrary URL. `save(_:)` now delegates to it with `fileURL`.
+  - `Sources/Teleprompter/AppDelegate.swift` — replaced the state-based persistence subscriber with an action-based one (`persistenceSaveAfter(action:state:)`). Recording-log actions: cancel any pending debounce timer and write to disk synchronously. All other actions: keep the 500ms debounced save (typing, appearance, playback, etc.).
+  - `Tests/TeleprompterTests/ReducerTests.swift` — added three new tests (see below).
+- **Commands:**
+  - `swift build` → success.
+  - `swift test` → **8/8 passing** (5 prior tests + 3 new).
+- **Tests added:** `Tests/TeleprompterTests/ReducerTests.swift`
+  - `testRecordingLogActionsAreFlaggedForImmediatePersistence` — asserts every `recordingLog*` action returns true from `isRecordingLogMutation` and that a representative set of non-log actions returns false. Forces future additions to opt in or out explicitly.
+  - `testRecordingLogActionTriggersSynchronousPersistence` — wires a store with an action observer that mirrors the AppDelegate behavior (sync `Persistence.saveTo` on log mutations), dispatches a `recordingLogAdd`, and asserts the file exists on disk by the time `dispatch` returns and that `loadFrom` reads the entry back.
+  - `testNonRecordingLogActionDoesNotTriggerSynchronousPersistence` — dispatches `setFontSize`, `setPosition`, and `scriptSetContent` and asserts no file is written, confirming the debounce path is preserved for non-log mutations.
+- **Notes:** The action-observer pattern is generally useful — any future side-effect that depends on *which* action fired (not just the resulting state) can hook into it. Also: I deliberately did NOT re-fire the persistence save on app startup. The old code's `store.subscribe { ... schedulePersistenceSave }` was called once with the initial state and scheduled a debounced save right after launch. The new `subscribeActions` path doesn't fire on subscribe, so the first save now happens only after the user does something. That matches `applicationWillTerminate`'s explicit final save and removes a tiny bit of disk noise at startup.
