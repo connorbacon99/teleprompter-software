@@ -107,7 +107,7 @@ tasks depend on. Always work the topmost task with `"passes": false`.
       "Add a 'Status' column to the CSV export ('live' or 'superseded')",
       "Add a unit test: a log with flub, flub, retake should yield two superseded flubs + one live retake; chapter, flub, retake should yield one chapter live + one superseded flub + one live retake"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "edit-tracking",

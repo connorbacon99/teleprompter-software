@@ -183,7 +183,7 @@ final class ReducerTests: XCTestCase {
         let csv = TrackerView.csvText(for: entries, moduleName: "Module A")
         let lines = csv.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
         XCTAssertEqual(lines.count, 3, "header + two rows")
-        XCTAssertEqual(lines[0], "Module,Time,Wallclock,Kind,Line,Note")
+        XCTAssertEqual(lines[0], "Module,Time,Wallclock,Kind,Status,Line,Note")
 
         // Row 1: real wallclock → ISO-8601, parseable back.
         let row1Fields = lines[1].split(separator: ",").map(String.init)
@@ -199,12 +199,83 @@ final class ReducerTests: XCTestCase {
             XCTAssertEqual(parsed.timeIntervalSince1970, when.timeIntervalSince1970, accuracy: 1.0)
         }
         XCTAssertEqual(row1Fields[3], "Flub")
+        XCTAssertEqual(row1Fields[4], "live", "non-superseded entry must render as 'live' in CSV")
 
         // Row 2: legacy .distantPast wallclock → empty column so editors
         // don't see a year-0001 timestamp in their CSV.
         let row2Fields = lines[2].split(separator: ",", omittingEmptySubsequences: false).map(String.init)
         XCTAssertEqual(row2Fields[2], "", "legacy .distantPast wallclock must render as empty in CSV")
         XCTAssertEqual(row2Fields[3], "Chapter")
+        XCTAssertEqual(row2Fields[4], "live")
+    }
+
+    func testRetakeSupersedesPriorFlubsInChapterWindow() {
+        var state = AppState.initial()
+        let scriptId = state.activeScriptId
+
+        // Case 1: flub, flub, retake → both flubs superseded, retake live.
+        let flub1 = RecordingLogEntry(id: UUID(), timeSeconds: 1, line: "a", note: "", kind: .flub)
+        let flub2 = RecordingLogEntry(id: UUID(), timeSeconds: 2, line: "b", note: "", kind: .flub)
+        let retake1 = RecordingLogEntry(id: UUID(), timeSeconds: 3, line: "c", note: "", kind: .retake)
+        state = reduce(state: state, action: .recordingLogAdd(scriptId: scriptId, entry: flub1))
+        state = reduce(state: state, action: .recordingLogAdd(scriptId: scriptId, entry: flub2))
+        state = reduce(state: state, action: .recordingLogAdd(scriptId: scriptId, entry: retake1))
+
+        let log1 = state.activeScript?.recordingLog ?? []
+        XCTAssertEqual(log1.count, 3)
+        XCTAssertTrue(log1[0].superseded, "first flub before retake must be superseded")
+        XCTAssertTrue(log1[1].superseded, "second flub before retake must be superseded")
+        XCTAssertFalse(log1[2].superseded, "retake itself must stay live")
+
+        // Case 2: chapter, flub, retake → chapter live, flub superseded, retake live.
+        // (Chapter scopes the supersede window — flubs before the chapter are
+        // untouched, but this fresh script starts with the chapter at index 0.)
+        var state2 = AppState.initial()
+        let scriptId2 = state2.activeScriptId
+        let chapter = RecordingLogEntry(id: UUID(), timeSeconds: 10, line: "ch", note: "", kind: .chapter)
+        let flub3 = RecordingLogEntry(id: UUID(), timeSeconds: 11, line: "f", note: "", kind: .flub)
+        let retake2 = RecordingLogEntry(id: UUID(), timeSeconds: 12, line: "r", note: "", kind: .retake)
+        state2 = reduce(state: state2, action: .recordingLogAdd(scriptId: scriptId2, entry: chapter))
+        state2 = reduce(state: state2, action: .recordingLogAdd(scriptId: scriptId2, entry: flub3))
+        state2 = reduce(state: state2, action: .recordingLogAdd(scriptId: scriptId2, entry: retake2))
+
+        let log2 = state2.activeScript?.recordingLog ?? []
+        XCTAssertEqual(log2.count, 3)
+        XCTAssertFalse(log2[0].superseded, "chapter must stay live")
+        XCTAssertTrue(log2[1].superseded, "flub after chapter, before retake, must be superseded")
+        XCTAssertFalse(log2[2].superseded, "retake must stay live")
+
+        // Case 3: flub before chapter is NOT touched by a later retake.
+        var state3 = AppState.initial()
+        let scriptId3 = state3.activeScriptId
+        let preFlub = RecordingLogEntry(id: UUID(), timeSeconds: 1, line: "pre", note: "", kind: .flub)
+        let ch = RecordingLogEntry(id: UUID(), timeSeconds: 2, line: "ch", note: "", kind: .chapter)
+        let rt = RecordingLogEntry(id: UUID(), timeSeconds: 3, line: "rt", note: "", kind: .retake)
+        state3 = reduce(state: state3, action: .recordingLogAdd(scriptId: scriptId3, entry: preFlub))
+        state3 = reduce(state: state3, action: .recordingLogAdd(scriptId: scriptId3, entry: ch))
+        state3 = reduce(state: state3, action: .recordingLogAdd(scriptId: scriptId3, entry: rt))
+
+        let log3 = state3.activeScript?.recordingLog ?? []
+        XCTAssertEqual(log3.count, 3)
+        XCTAssertFalse(log3[0].superseded, "flub before the chapter boundary must stay live — retake only supersedes within its chapter window")
+        XCTAssertFalse(log3[1].superseded)
+        XCTAssertFalse(log3[2].superseded)
+    }
+
+    func testRecordingLogEntryDecodesWithoutSupersededFieldDefaultsToFalse() throws {
+        // Pre-supersede JSON has no `superseded` key. Tolerant decoding must
+        // default it to false.
+        let legacyJSON = """
+        {
+            "id": "11111111-2222-3333-4444-555555555555",
+            "timeSeconds": 1,
+            "line": "x",
+            "note": "y",
+            "kind": "flub"
+        }
+        """
+        let entry = try JSONDecoder().decode(RecordingLogEntry.self, from: Data(legacyJSON.utf8))
+        XCTAssertFalse(entry.superseded)
     }
 
     func testRecordingLogSetKindUpdatesEntryKind() {

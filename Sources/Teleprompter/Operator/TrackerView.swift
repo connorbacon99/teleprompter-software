@@ -435,13 +435,14 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     static func csvText(for entries: [RecordingLogEntry], moduleName: String) -> String {
-        var lines: [String] = ["Module,Time,Wallclock,Kind,Line,Note"]
+        var lines: [String] = ["Module,Time,Wallclock,Kind,Status,Line,Note"]
         for e in entries {
             lines.append([
                 csvField(moduleName),
                 csvTime(e.timeSeconds),
                 csvField(csvWallclock(e.wallclock)),
                 csvField(kindTitle(e.kind)),
+                e.superseded ? "superseded" : "live",
                 csvField(e.line),
                 csvField(e.note)
             ].joined(separator: ","))

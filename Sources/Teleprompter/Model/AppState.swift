@@ -32,18 +32,25 @@ struct RecordingLogEntry: Codable, Equatable, Identifiable {
     /// chosen so the CSV/markers export can render it as "unknown" rather
     /// than as a misleading "now".
     var wallclock: Date
+    /// Whether this entry has been superseded by a later retake within the
+    /// same chapter window. Set by the reducer when a `.retake` is added (all
+    /// preceding `.flub` entries since the most recent `.chapter` flip to
+    /// true). Editor-export tasks should skip superseded entries by default.
+    /// Older persisted entries decode without this field and default to false.
+    var superseded: Bool
 
-    init(id: UUID, timeSeconds: Double, line: String, note: String, kind: EntryKind = .flub, wallclock: Date = Date()) {
+    init(id: UUID, timeSeconds: Double, line: String, note: String, kind: EntryKind = .flub, wallclock: Date = Date(), superseded: Bool = false) {
         self.id = id
         self.timeSeconds = timeSeconds
         self.line = line
         self.note = note
         self.kind = kind
         self.wallclock = wallclock
+        self.superseded = superseded
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, timeSeconds, line, note, kind, wallclock
+        case id, timeSeconds, line, note, kind, wallclock, superseded
     }
 
     init(from decoder: Decoder) throws {
@@ -58,6 +65,8 @@ struct RecordingLogEntry: Codable, Equatable, Identifiable {
         // (not "now") so legacy entries are visibly unknown rather than
         // misdated to the moment the user happened to reopen the app.
         self.wallclock = try c.decodeIfPresent(Date.self, forKey: .wallclock) ?? .distantPast
+        // Tolerant default for pre-supersede state.json files.
+        self.superseded = try c.decodeIfPresent(Bool.self, forKey: .superseded) ?? false
     }
 }
 

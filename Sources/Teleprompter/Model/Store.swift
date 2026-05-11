@@ -104,6 +104,23 @@ func reduce(state: AppState, action: Action) -> AppState {
     case .recordingLogAdd(let scriptId, let entry):
         if let idx = s.scripts.firstIndex(where: { $0.id == scriptId }) {
             s.scripts[idx].recordingLog.append(entry)
+            // Auto-supersede prior flubs in the current chapter window when a
+            // retake is logged. The "chapter window" is from the most recent
+            // `.chapter` (exclusive) to the new retake (exclusive); if no
+            // chapter exists yet, the window is from the start of the log.
+            // Only `.flub` entries flip — clean/chapter/note stay live, and
+            // a previously-superseded flub stays superseded.
+            if entry.kind == .retake {
+                let log = s.scripts[idx].recordingLog
+                let retakeIdx = log.count - 1
+                let chapterIdx = log[..<retakeIdx].lastIndex(where: { $0.kind == .chapter })
+                let windowStart = chapterIdx.map { $0 + 1 } ?? 0
+                if windowStart < retakeIdx {
+                    for i in windowStart..<retakeIdx where s.scripts[idx].recordingLog[i].kind == .flub {
+                        s.scripts[idx].recordingLog[i].superseded = true
+                    }
+                }
+            }
         }
 
     case .recordingLogUpdateLine(let scriptId, let entryId, let line):

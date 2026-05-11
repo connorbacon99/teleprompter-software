@@ -2,8 +2,8 @@
 
 ## Current Status
 **Last Updated:** 2026-05-11
-**Tasks Completed:** 5
-**Current Task:** None (next: edit-tracking — auto-supersede flub entries when a retake-from-here is logged)
+**Tasks Completed:** 6
+**Current Task:** None (next: edit-tracking — register a global hotkey that logs a flub from any focused app)
 
 ---
 
@@ -100,3 +100,18 @@ Format:
   - `testRecordingLogEntryDefaultWallclockIsRecent`
   - `testCSVExportContainsParseableISO8601WallclockColumn`
 - **Notes:** The CSV header changed shape (added `Wallclock` and `Kind` columns) — any downstream tooling reading the CSV via fixed column positions instead of names would need updating, but as of this iteration there is no such tooling. The Premiere/FCPXML export tasks coming up will produce their own column layouts, so this CSV is purely for human review or generic spreadsheet use. The `Kind` column had been added to the UI in the previous task but was missing from CSV export; folded that fix into this task since the wallclock change already touched the same lines. The static `iso8601Formatter` is cached at module load (ISO8601DateFormatter is documented as thread-safe). `Date.distantPast == Date.distantPast` is a stable equality comparison in Swift so the "render as empty" guard is reliable.
+
+### 2026-05-11 — Task: edit-tracking — Auto-supersede flub entries when a retake-from-here is logged
+
+- **Files changed:**
+  - `Sources/Teleprompter/Model/AppState.swift` — added `var superseded: Bool` to `RecordingLogEntry` with tolerant decode (`decodeIfPresent ?? false`) and default `false` in the memberwise init. Extended `CodingKeys` to include `superseded`.
+  - `Sources/Teleprompter/Model/Store.swift` — in the `recordingLogAdd` reducer case, after appending a `.retake` entry, walk back from the retake (exclusive) to the most recent `.chapter` (exclusive) — or the start of the log if no chapter yet — and flip every `.flub` in that window to `superseded = true`. Clean/chapter/note entries in that window are left untouched, as are flubs that sit *before* the chapter boundary.
+  - `Sources/Teleprompter/Operator/TrackerView.swift` — added a `Status` column to `csvText(for:moduleName:)` between `Kind` and `Line`. Value is `live` for normal entries, `superseded` for flubs that have been overridden by a retake. New header is `Module,Time,Wallclock,Kind,Status,Line,Note`.
+  - `Tests/TeleprompterTests/ReducerTests.swift` — updated `testCSVExportContainsParseableISO8601WallclockColumn` for the new header + `Status` column index; added `testRetakeSupersedesPriorFlubsInChapterWindow` (covers flub/flub/retake, chapter/flub/retake, and flub/chapter/retake — the third case verifies the chapter actually scopes the window) and `testRecordingLogEntryDecodesWithoutSupersededFieldDefaultsToFalse`.
+- **Commands:**
+  - `swift build` → success.
+  - `swift test` → **14/14 passing** (12 prior + 2 new).
+- **Tests added:** `Tests/TeleprompterTests/ReducerTests.swift`
+  - `testRetakeSupersedesPriorFlubsInChapterWindow`
+  - `testRecordingLogEntryDecodesWithoutSupersededFieldDefaultsToFalse`
+- **Notes:** The CSV header changed shape *again* (now seven columns instead of six). The Premiere/FCPXML export tasks coming up will use entry `kind` and `superseded` directly from the model, not by re-parsing CSV — so the column-order churn is contained to this one export. The supersede logic runs entirely inside the `recordingLogAdd` reducer case (no separate `markSuperseded` action) because the only trigger is "a retake was just added" — keeping it in one place makes the invariant easier to read. If a retake is later removed via `recordingLogRemove`, the prior flubs stay marked `superseded` — that's intentional for now (the operator's intent at the moment of the retake is what we capture), but a future iteration could revisit if it turns out to be confusing. UI does not yet surface `superseded` visually (greyed-out row, strikethrough) — only CSV export reflects it. That's deferred until the human reviews; the model + export side is what the editor handoff depends on.
