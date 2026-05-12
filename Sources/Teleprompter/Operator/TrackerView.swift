@@ -7,9 +7,10 @@ import QuartzCore
 /// the instructor is on (auto-filled from the active script + current scroll
 /// position, then editable), and a free-text note. Exports the log as CSV.
 ///
-/// All recording session state (timer, countdown) lives locally in this view —
-/// it doesn't touch the store or the rendering pipeline. Log entries persist
-/// per-script in `Script.recordingLog`.
+/// Recording-timer state (phase, countdown) is owned by the `Store` so the
+/// compact `TrackerHUDView` docked beneath the Monitor preview can share it.
+/// The "single state owner" invariant is intentional — duplicating it across
+/// views caused the v1 desync bugs we're explicitly engineering away from.
 final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     private let store: Store
     private let engine: PlaybackEngine
@@ -19,23 +20,8 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     private var activeScriptId: UUID?
     private var activeScriptName: String = ""
     private var activeScriptContent: String = ""
-
-    /// Recording session state. Three phases:
-    /// - `idle`: timer at 0:00, nothing scheduled.
-    /// - `running(start)`: timer is live. `start` is the CACurrentMediaTime at
-    ///   which elapsed=0, so during the countdown `start` is in the future
-    ///   (and `now - start` is negative — that's how the display knows to show
-    ///   the countdown counter).
-    /// - `paused(elapsed)`: timer frozen at this many seconds. Resume sets
-    ///   `start = now - elapsed` so elapsed continues from where it left off.
-    private enum RecState {
-        case idle
-        case running(start: TimeInterval)
-        case paused(elapsed: TimeInterval)
-    }
-    private var rec: RecState = .idle
+    private var recordingTimer: RecordingTimer = .initial()
     private var tickTimer: Timer?
-    private var countdownSecondsConfig: Int = 3
 
     // UI elements.
     private let startStopButton = NSButton(title: "Start", target: nil, action: nil)
@@ -104,7 +90,7 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
 
         countdownStepper.minValue = 0
         countdownStepper.maxValue = 30
-        countdownStepper.integerValue = countdownSecondsConfig
+        countdownStepper.integerValue = recordingTimer.countdownSeconds
         countdownStepper.target = self
         countdownStepper.action = #selector(countdownChanged)
 
@@ -237,6 +223,19 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
             entries = newEntries
             tableView.reloadData()
         }
+        if recordingTimer != state.recordingTimer {
+            recordingTimer = state.recordingTimer
+            // Don't write back to the stepper while the user is editing it —
+            // they may be in the middle of clicking up/down and the action
+            // hasn't fired yet. Only sync if the displayed value diverges
+            // from state.
+            if countdownStepper.integerValue != state.recordingTimer.countdownSeconds {
+                countdownStepper.integerValue = state.recordingTimer.countdownSeconds
+            }
+            updateCountdownLabel()
+            updateTimerDisplay()
+            updateStartStopButton()
+        }
     }
 
     // MARK: - Timer
@@ -251,11 +250,7 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     /// Returns elapsed seconds since recording started, or `nil` if idle.
     /// Negative values indicate countdown (e.g. -2.4 → 2.4 s remaining).
     private func currentElapsedSeconds() -> Double? {
-        switch rec {
-        case .idle: return nil
-        case .running(let start): return CACurrentMediaTime() - start
-        case .paused(let elapsed): return elapsed
-        }
+        return recordingTimer.elapsedSeconds(now: CACurrentMediaTime())
     }
 
     /// Public accessor for the live recording-session elapsed time, in
@@ -284,7 +279,7 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
             let mins = total / 60
             let secs = total % 60
             timerLabel.stringValue = String(format: "%d:%02d", mins, secs)
-            switch rec {
+            switch recordingTimer.phase {
             case .paused:
                 statusLabel.stringValue = "Paused"
                 timerLabel.textColor = NSColor(white: 0.7, alpha: 1)
@@ -296,7 +291,7 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     private func updateStartStopButton() {
-        switch rec {
+        switch recordingTimer.phase {
         case .idle: startStopButton.title = "Start"
         case .running(let start) where CACurrentMediaTime() < start: startStopButton.title = "Cancel"
         case .running: startStopButton.title = "Pause"
@@ -305,35 +300,19 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     private func updateCountdownLabel() {
-        countdownLabel.stringValue = "Countdown: \(countdownSecondsConfig) s"
+        countdownLabel.stringValue = "Countdown: \(recordingTimer.countdownSeconds) s"
     }
 
     // MARK: - Actions
 
     @objc private func startStopAction() {
-        let now = CACurrentMediaTime()
-        switch rec {
-        case .idle:
-            let countdown = TimeInterval(max(0, countdownSecondsConfig))
-            rec = .running(start: now + countdown)
-        case .running(let start) where now < start:
-            // Mid-countdown — cancel back to idle, no time captured.
-            rec = .idle
-        case .running(let start):
-            // Active recording — pause, preserving elapsed.
-            rec = .paused(elapsed: now - start)
-        case .paused(let elapsed):
-            // Resume from paused position. No new countdown.
-            rec = .running(start: now - elapsed)
-        }
-        updateStartStopButton()
-        updateTimerDisplay()
+        store.dispatch(.recToggle(now: CACurrentMediaTime()))
     }
 
     @objc private func resetAction() {
         // Reset is destructive — confirm if a session is in progress.
         let needsConfirm: Bool = {
-            switch rec {
+            switch recordingTimer.phase {
             case .idle: return false
             default: return true
             }
@@ -342,9 +321,7 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
             // Reset of an already-idle timer is a no-op; don't insert a
             // synthetic session divider for it (there was no session
             // boundary to demarcate).
-            rec = .idle
-            updateStartStopButton()
-            updateTimerDisplay()
+            store.dispatch(.recReset)
             return
         }
         let alert = NSAlert()
@@ -385,9 +362,7 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
             )
             store.dispatch(.recordingLogAdd(scriptId: scriptId, entry: entry))
         }
-        rec = .idle
-        updateStartStopButton()
-        updateTimerDisplay()
+        store.dispatch(.recReset)
     }
 
     /// Builds the label that goes on a session-divider entry. The new session
@@ -406,14 +381,13 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     }()
 
     @objc private func countdownChanged() {
-        countdownSecondsConfig = countdownStepper.integerValue
-        updateCountdownLabel()
+        store.dispatch(.recSetCountdown(seconds: countdownStepper.integerValue))
     }
 
     @objc private func logAction() {
         guard let scriptId = activeScriptId else { return }
         let elapsed = max(0, currentElapsedSeconds() ?? 0)
-        let line = paragraphAtCurrentScrollPosition()
+        let line = store.state.activeScript?.paragraph(atPosition: engine.currentPosition) ?? ""
         let entry = RecordingLogEntry(id: UUID(), timeSeconds: elapsed, line: line, note: "", wallclock: Date())
         store.dispatch(.recordingLogAdd(scriptId: scriptId, entry: entry))
         // Scroll to the new row so the operator can immediately see it.
@@ -474,29 +448,8 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     // MARK: - Helpers
-
-    /// Picks the paragraph at the engine's current scroll percent, weighted by
-    /// character count so long paragraphs span proportionally more of the
-    /// scroll. Approximate but matches what the operator would see at the
-    /// reading-line indicator closely enough for v1; a future click-to-
-    /// highlight pass will replace this with an exact y-to-character mapping.
-    private func paragraphAtCurrentScrollPosition() -> String {
-        let percent = max(0, min(1, engine.currentPosition))
-        let paragraphs = activeScriptContent
-            .components(separatedBy: "\n")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        guard !paragraphs.isEmpty else { return "" }
-        let totalChars = paragraphs.reduce(0) { $0 + $1.count }
-        if totalChars == 0 { return paragraphs[0] }
-        let target = Double(totalChars) * percent
-        var cumulative = 0
-        for p in paragraphs {
-            cumulative += p.count
-            if Double(cumulative) >= target { return p }
-        }
-        return paragraphs.last ?? ""
-    }
+    // paragraph-at-scroll lookup moved to `Script.paragraph(atPosition:)` in
+    // `AppState.swift` so the HUD can use the same logic.
 
     static func csvText(for entries: [RecordingLogEntry], moduleName: String) -> String {
         var lines: [String] = ["Module,Time,Wallclock,Kind,Status,Line,Note"]

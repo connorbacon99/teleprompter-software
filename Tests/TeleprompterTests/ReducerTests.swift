@@ -541,4 +541,124 @@ final class ReducerTests: XCTestCase {
         )
         XCTAssertEqual(overflow, "100% through script • ~0 min remaining at current speed")
     }
+
+    // MARK: - Recording timer (store-owned)
+
+    func testRecToggleFromIdleStartsRunningWithCountdownOffset() {
+        var s = AppState.initial()
+        s.recordingTimer.countdownSeconds = 3
+        let now: TimeInterval = 1000
+        s = reduce(state: s, action: .recToggle(now: now))
+        switch s.recordingTimer.phase {
+        case .running(let start):
+            XCTAssertEqual(start, now + 3, accuracy: 0.0001)
+        default:
+            XCTFail("expected running, got \(s.recordingTimer.phase)")
+        }
+    }
+
+    func testRecToggleMidCountdownCancelsToIdle() {
+        var s = AppState.initial()
+        s.recordingTimer.countdownSeconds = 3
+        let now: TimeInterval = 1000
+        s = reduce(state: s, action: .recToggle(now: now))
+        // Toggle again 1 second later — still mid-countdown (start was 1003).
+        s = reduce(state: s, action: .recToggle(now: now + 1))
+        XCTAssertEqual(s.recordingTimer.phase, .idle)
+    }
+
+    func testRecToggleActiveRunningPausesPreservingElapsed() {
+        var s = AppState.initial()
+        s.recordingTimer.countdownSeconds = 0
+        let start: TimeInterval = 1000
+        s = reduce(state: s, action: .recToggle(now: start))
+        // After 10s of actual recording, pause.
+        s = reduce(state: s, action: .recToggle(now: start + 10))
+        switch s.recordingTimer.phase {
+        case .paused(let elapsed):
+            XCTAssertEqual(elapsed, 10, accuracy: 0.0001)
+        default:
+            XCTFail("expected paused, got \(s.recordingTimer.phase)")
+        }
+    }
+
+    func testRecToggleFromPausedResumesAtElapsedOffset() {
+        var s = AppState.initial()
+        s.recordingTimer.phase = .paused(elapsed: 42)
+        let resumeAt: TimeInterval = 5000
+        s = reduce(state: s, action: .recToggle(now: resumeAt))
+        switch s.recordingTimer.phase {
+        case .running(let start):
+            // Resume sets start = now - elapsed so the original elapsed is preserved.
+            XCTAssertEqual(start, resumeAt - 42, accuracy: 0.0001)
+        default:
+            XCTFail("expected running, got \(s.recordingTimer.phase)")
+        }
+    }
+
+    func testRecResetReturnsToIdleRegardlessOfPriorPhase() {
+        var s = AppState.initial()
+        s.recordingTimer.phase = .running(start: 1234)
+        s = reduce(state: s, action: .recReset)
+        XCTAssertEqual(s.recordingTimer.phase, .idle)
+
+        s.recordingTimer.phase = .paused(elapsed: 600)
+        s = reduce(state: s, action: .recReset)
+        XCTAssertEqual(s.recordingTimer.phase, .idle)
+    }
+
+    func testRecSetCountdownClampsTo0Through30() {
+        var s = AppState.initial()
+        s = reduce(state: s, action: .recSetCountdown(seconds: -5))
+        XCTAssertEqual(s.recordingTimer.countdownSeconds, 0)
+        s = reduce(state: s, action: .recSetCountdown(seconds: 100))
+        XCTAssertEqual(s.recordingTimer.countdownSeconds, 30)
+        s = reduce(state: s, action: .recSetCountdown(seconds: 7))
+        XCTAssertEqual(s.recordingTimer.countdownSeconds, 7)
+    }
+
+    func testRecordingTimerElapsedSecondsReturnsNilWhenIdle() {
+        let timer = RecordingTimer(phase: .idle, countdownSeconds: 3)
+        XCTAssertNil(timer.elapsedSeconds(now: 999))
+    }
+
+    func testRecordingTimerElapsedSecondsNegativeDuringCountdown() {
+        let timer = RecordingTimer(phase: .running(start: 1010), countdownSeconds: 3)
+        let e = timer.elapsedSeconds(now: 1000)
+        XCTAssertNotNil(e)
+        XCTAssertEqual(e!, -10, accuracy: 0.0001)
+    }
+
+    // MARK: - Script.paragraph(atPosition:)
+
+    func testScriptParagraphAtBeginPicksFirstParagraph() {
+        var s = AppState.initial()
+        s.scripts[0].content = "alpha\n\nbeta\n\ngamma"
+        XCTAssertEqual(s.activeScript?.paragraph(atPosition: 0), "alpha")
+    }
+
+    func testScriptParagraphAtEndPicksLastParagraph() {
+        var s = AppState.initial()
+        s.scripts[0].content = "alpha\n\nbeta\n\ngamma"
+        XCTAssertEqual(s.activeScript?.paragraph(atPosition: 1), "gamma")
+    }
+
+    func testScriptParagraphInMiddlePicksMiddleParagraph() {
+        var s = AppState.initial()
+        s.scripts[0].content = "alpha\n\nbeta\n\ngamma"
+        // Equal-length paragraphs → 0.5 lands at the midpoint of "beta".
+        XCTAssertEqual(s.activeScript?.paragraph(atPosition: 0.5), "beta")
+    }
+
+    func testScriptParagraphEmptyContentReturnsEmptyString() {
+        let s = AppState.initial()
+        XCTAssertEqual(s.activeScript?.paragraph(atPosition: 0.5), "")
+    }
+
+    func testScriptParagraphClampsOutOfRangePosition() {
+        var s = AppState.initial()
+        s.scripts[0].content = "alpha\n\nbeta"
+        XCTAssertEqual(s.activeScript?.paragraph(atPosition: -1), "alpha")
+        XCTAssertEqual(s.activeScript?.paragraph(atPosition: 2), "beta")
+    }
 }

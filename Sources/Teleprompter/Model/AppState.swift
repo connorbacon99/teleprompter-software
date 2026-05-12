@@ -115,6 +115,35 @@ struct DisplayInfo: Codable, Equatable {
     var isPrimary: Bool
 }
 
+/// Recording-session timer phase. The active timer anchor is a
+/// `CACurrentMediaTime` value — a process-relative monotonic clock — which is
+/// why this state lives in-memory only and is never persisted to disk. A
+/// stale `start` reloaded from a previous process would be meaningless.
+enum RecPhase: Codable, Equatable {
+    case idle
+    case running(start: TimeInterval)
+    case paused(elapsed: TimeInterval)
+}
+
+struct RecordingTimer: Codable, Equatable {
+    var phase: RecPhase
+    var countdownSeconds: Int
+
+    static func initial() -> RecordingTimer {
+        RecordingTimer(phase: .idle, countdownSeconds: 3)
+    }
+
+    /// Elapsed seconds since recording started, or `nil` if idle. Negative
+    /// values indicate the countdown phase (e.g. -2.4 → 2.4 s remaining).
+    func elapsedSeconds(now: TimeInterval) -> Double? {
+        switch phase {
+        case .idle: return nil
+        case .running(let start): return now - start
+        case .paused(let elapsed): return elapsed
+        }
+    }
+}
+
 struct AppState: Codable, Equatable {
     var scripts: [Script]
     var activeScriptId: UUID
@@ -123,6 +152,7 @@ struct AppState: Codable, Equatable {
     var displays: [DisplayInfo]
     var selectedDisplayId: UInt32?
     var teleprompterOpen: Bool
+    var recordingTimer: RecordingTimer
 
     static func initial() -> AppState {
         let firstScript = Script(id: UUID(), name: "Untitled", content: "", cues: [], recordingLog: [])
@@ -149,12 +179,37 @@ struct AppState: Codable, Equatable {
             ),
             displays: [],
             selectedDisplayId: nil,
-            teleprompterOpen: false
+            teleprompterOpen: false,
+            recordingTimer: .initial()
         )
     }
 
     var activeScript: Script? {
         scripts.first(where: { $0.id == activeScriptId })
+    }
+}
+
+extension Script {
+    /// Picks the paragraph at a 0...1 scroll percent, weighted by character
+    /// count so long paragraphs span proportionally more of the scroll. Used
+    /// by both `TrackerView` and `TrackerHUDView` to auto-fill the "line"
+    /// field on a logged entry from the live scroll position.
+    func paragraph(atPosition percent: Double) -> String {
+        let p = max(0, min(1, percent))
+        let paragraphs = content
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        guard !paragraphs.isEmpty else { return "" }
+        let total = paragraphs.reduce(0) { $0 + $1.count }
+        if total == 0 { return paragraphs[0] }
+        let target = Double(total) * p
+        var cumulative = 0
+        for para in paragraphs {
+            cumulative += para.count
+            if Double(cumulative) >= target { return para }
+        }
+        return paragraphs.last ?? ""
     }
 }
 
@@ -189,6 +244,12 @@ enum Action {
     case displaysRefreshed([DisplayInfo])
     case setSelectedDisplay(UInt32?)
     case setTeleprompterOpen(Bool)
+
+    /// Recording-timer state transitions. `now` is captured at dispatch time
+    /// (`CACurrentMediaTime()`) so the reducer stays pure.
+    case recToggle(now: TimeInterval)
+    case recReset
+    case recSetCountdown(seconds: Int)
 
     /// Coalesced action for live speed change during play. Captures the live
     /// visual position from the operator so both VCs restart at the same

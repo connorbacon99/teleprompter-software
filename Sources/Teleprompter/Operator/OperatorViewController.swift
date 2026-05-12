@@ -15,6 +15,8 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
     private let editorScrollView = NSScrollView()
     private let editorTextView = NSTextView()
     private var monitorView: MonitorPreviewView!
+    private var monitorContainer: NSView!
+    private var trackerHUDView: TrackerHUDView!
     private var trackerView: TrackerView!
     private var tabBar: ScriptTabBar!
 
@@ -105,10 +107,32 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
         editorScrollView.backgroundColor = NSColor(white: 0.06, alpha: 1)
         editorScrollView.translatesAutoresizingMaskIntoConstraints = false
 
-        // Monitor
+        // Monitor (preview on top + tracker HUD docked at the bottom). The
+        // HUD shares timer state with TrackerView via the Store so the
+        // operator can log mid-recording without leaving this tab.
         monitorView = MonitorPreviewView(store: store, engine: engine)
         monitorView.translatesAutoresizingMaskIntoConstraints = false
-        monitorView.isHidden = true
+
+        trackerHUDView = TrackerHUDView(store: store, engine: engine)
+        trackerHUDView.translatesAutoresizingMaskIntoConstraints = false
+
+        monitorContainer = NSView()
+        monitorContainer.translatesAutoresizingMaskIntoConstraints = false
+        monitorContainer.isHidden = true
+        monitorContainer.addSubview(monitorView)
+        monitorContainer.addSubview(trackerHUDView)
+
+        NSLayoutConstraint.activate([
+            monitorView.topAnchor.constraint(equalTo: monitorContainer.topAnchor),
+            monitorView.leadingAnchor.constraint(equalTo: monitorContainer.leadingAnchor),
+            monitorView.trailingAnchor.constraint(equalTo: monitorContainer.trailingAnchor),
+            monitorView.bottomAnchor.constraint(equalTo: trackerHUDView.topAnchor),
+
+            trackerHUDView.leadingAnchor.constraint(equalTo: monitorContainer.leadingAnchor),
+            trackerHUDView.trailingAnchor.constraint(equalTo: monitorContainer.trailingAnchor),
+            trackerHUDView.bottomAnchor.constraint(equalTo: monitorContainer.bottomAnchor),
+            trackerHUDView.heightAnchor.constraint(equalToConstant: 80)
+        ])
 
         // Tracker
         trackerView = TrackerView(store: store, engine: engine)
@@ -116,7 +140,7 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
         trackerView.isHidden = true
 
         contentContainer.addSubview(editorScrollView)
-        contentContainer.addSubview(monitorView)
+        contentContainer.addSubview(monitorContainer)
         contentContainer.addSubview(trackerView)
 
         // Sidebar controls
@@ -242,10 +266,10 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
             editorScrollView.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor),
             editorScrollView.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor),
 
-            monitorView.topAnchor.constraint(equalTo: contentContainer.topAnchor),
-            monitorView.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor),
-            monitorView.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor),
-            monitorView.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor),
+            monitorContainer.topAnchor.constraint(equalTo: contentContainer.topAnchor),
+            monitorContainer.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor),
+            monitorContainer.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor),
+            monitorContainer.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor),
 
             trackerView.topAnchor.constraint(equalTo: contentContainer.topAnchor),
             trackerView.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor),
@@ -301,17 +325,27 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self else { return event }
             guard event.window === self.view.window else { return event }
-            // Don't intercept when typing in the editor
-            if self.view.window?.firstResponder === self.editorTextView { return event }
             // Don't fight with Cmd+key shortcuts (menu, undo, etc.)
             if event.modifierFlags.contains(.command) { return event }
 
+            // Esc closes the teleprompter regardless of focus — it's the
+            // panic shortcut and must work even when the cursor is in a
+            // tracker cell or the script editor (where Esc would otherwise
+            // just beep at the field editor).
+            if event.keyCode == 53, self.store.state.teleprompterOpen {
+                (NSApp.delegate as? AppDelegate)?.closeTeleprompter()
+                return nil
+            }
+
+            // Don't intercept other keys when any text editor has focus. The
+            // script editor, tracker table cells (line/note inline edit), and
+            // the tab-bar rename field all use an NSText-derived field editor
+            // as their first responder. Without this, spacebar in a tracker
+            // cell would toggle playback mid-typing.
+            if let resp = self.view.window?.firstResponder, resp is NSText { return event }
+
             switch event.keyCode {
-            case 53: // Esc — emergency close teleprompter
-                if self.store.state.teleprompterOpen {
-                    (NSApp.delegate as? AppDelegate)?.closeTeleprompter()
-                    return nil
-                }
+            case 53: // Esc — no teleprompter open, fall through to system
                 return event
             case 49: // Space
                 self.store.dispatch(.togglePlay)
@@ -333,14 +367,10 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
             case 11: // 'B' — bookmark current scroll position as a cue marker
                 // Bookmark only on unmodified B (shift is fine — that's still
                 // a literal 'B'). Control/Option may map to other shortcuts.
+                // The top-level NSText guard already prevents stealing 'B'
+                // from any text input.
                 let blockers: NSEvent.ModifierFlags = [.control, .option]
                 if !event.modifierFlags.intersection(blockers).isEmpty {
-                    return event
-                }
-                // Don't steal 'B' from any text input — the script editor, the
-                // tracker line/note fields, the tab-bar rename field all use
-                // an NSText-derived first responder while accepting keystrokes.
-                if let resp = self.view.window?.firstResponder, resp is NSText {
                     return event
                 }
                 self.addBookmarkAtCurrentPosition()
@@ -381,7 +411,7 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
     @objc private func segmentChanged() {
         let idx = segmentedControl.selectedSegment
         editorScrollView.isHidden = idx != 0
-        monitorView.isHidden = idx != 1
+        monitorContainer.isHidden = idx != 1
         trackerView.isHidden = idx != 2
     }
 

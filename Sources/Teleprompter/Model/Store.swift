@@ -216,9 +216,37 @@ func reduce(state: AppState, action: Action) -> AppState {
     case .setTeleprompterOpen(let open):
         s.teleprompterOpen = open
 
+    case .recToggle(let now):
+        // Mirrors the prior local-state machine in TrackerView; lifted into
+        // the reducer so both TrackerView and TrackerHUDView can observe and
+        // mutate the same timer without state ownership drift.
+        switch s.recordingTimer.phase {
+        case .idle:
+            let countdown = TimeInterval(max(0, s.recordingTimer.countdownSeconds))
+            s.recordingTimer.phase = .running(start: now + countdown)
+        case .running(let start) where now < start:
+            // Mid-countdown — cancel back to idle, no time captured.
+            s.recordingTimer.phase = .idle
+        case .running(let start):
+            // Active recording — pause, preserving elapsed.
+            s.recordingTimer.phase = .paused(elapsed: now - start)
+        case .paused(let elapsed):
+            // Resume from paused position. No new countdown.
+            s.recordingTimer.phase = .running(start: now - elapsed)
+        }
+
+    case .recReset:
+        s.recordingTimer.phase = .idle
+
+    case .recSetCountdown(let seconds):
+        s.recordingTimer.countdownSeconds = max(0, min(30, seconds))
+
     case .projectLoad(let newState):
         s = newState
         s.playback.playing = false
+        // Loaded projects never bring a live timer with them — the anchor
+        // would be a `CACurrentMediaTime` from a different process.
+        s.recordingTimer = .initial()
     }
     return s
 }
