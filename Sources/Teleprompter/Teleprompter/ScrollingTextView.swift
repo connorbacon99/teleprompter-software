@@ -2,11 +2,12 @@ import Cocoa
 import QuartzCore
 
 /// Shared text+scroll renderer used by the fullscreen teleprompter window
-/// and the in-operator monitor preview. Owns a `CATextLayer`, measures
-/// content, and drives scrolling via `CABasicAnimation` on the compositor
-/// thread (vsync-locked). Two instances driven by the same store + same
-/// state transitions stay visually synced because they receive the same
-/// animation parameters at the same media time.
+/// and the in-operator monitor preview. Owns the text page layers, measures
+/// content, and renders whatever position it is given — it does NOT advance
+/// the scroll itself. `PlaybackEngine` (CVDisplayLink-driven) is the single
+/// scroll driver: each vsync it pushes the same position to every instance
+/// via `applyStaticPosition(_:)` inside one CATransaction, so all surfaces
+/// stay visually synced by construction.
 final class ScrollingTextView: NSView {
     /// Container layer that owns all visible text. Animation drives this layer's
     /// transform, scrolling the entire script as one unit. We split the text
@@ -38,7 +39,6 @@ final class ScrollingTextView: NSView {
     private let maxPageHeightPts: CGFloat = 3500
 
     var horizontalPadding: CGFloat = 80
-    var pixelsPerSecondAt1x: CGFloat = 80
     var showGuides: Bool = true {
         didSet { applyGuideVisibility() }
     }
@@ -233,11 +233,10 @@ final class ScrollingTextView: NSView {
         for old in pageLayers { old.removeFromSuperlayer() }
         pageLayers.removeAll()
 
-        // Second pass: count CoreText's actual rendered lines per substring
-        // and multiply by the pinned line height. CTFramesetterSuggestFrameSize
-        // can include trailing line-gap padding that CATextLayer doesn't draw,
-        // so trusting the line count is more reliable than trusting the
-        // suggested-size height.
+        // Second pass: measure each page substring with boundingRect using
+        // the same font-only attributes CATextLayer renders with, so the
+        // measured height matches the drawn height and page seams stay
+        // invisible (see the no-paragraph-style note above).
         var yOffset: CGFloat = 0
         for range in pageRanges {
             let pageString = range.length > 0
@@ -270,15 +269,6 @@ final class ScrollingTextView: NSView {
         cachedTextHeight = totalHeight
         layer?.backgroundColor = nsColor(fromHex: appearance.bgColorHex).cgColor
         CATransaction.commit()
-    }
-
-    private func coreTextLineCount(_ attributed: NSAttributedString, width: CGFloat) -> Int {
-        if attributed.length == 0 { return 1 }
-        let framesetter = CTFramesetterCreateWithAttributedString(attributed as CFAttributedString)
-        let path = CGPath(rect: CGRect(x: 0, y: 0, width: width, height: .greatestFiniteMagnitude), transform: nil)
-        let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: 0), path, nil)
-        let lines = CTFrameGetLines(frame) as! [CTLine]
-        return max(1, lines.count)
     }
 
     func applyMirrorFlip(_ appearance: Appearance) {
@@ -326,7 +316,6 @@ final class ScrollingTextView: NSView {
 
     func applyStaticPosition(_ percent: Double) {
         cachedPercent = percent
-        scrollContainer.removeAnimation(forKey: "scroll")
         // Half-pixel snap on the y-translation prevents fractional sub-pixel
         // differences between layer instances on different displays.
         let tyValue = (ty(forPosition: percent) * 2).rounded() / 2
@@ -336,68 +325,6 @@ final class ScrollingTextView: NSView {
         CATransaction.commit()
     }
 
-    func startScrolling(
-        from startPercent: Double,
-        speed: Double,
-        beginTime: TimeInterval? = nil,
-        onFinish: @escaping () -> Void
-    ) {
-        guard cachedTextHeight > 0, bounds.height > 0 else { return }
-        scrollContainer.removeAnimation(forKey: "scroll")
-
-        let startTy = ty(forPosition: startPercent)
-        let endTy = ty(forPosition: 1.0)
-        applyStaticPosition(startPercent)
-
-        // |remaining| because vertical flip negates ty, so endTy > startTy
-        // when flip is on. Either way the scroll covers the same distance.
-        let remaining = abs(startTy - endTy)
-        guard remaining > 0 else { onFinish(); return }
-
-        let duration = TimeInterval(remaining / (pixelsPerSecondAt1x * CGFloat(speed)))
-        let animation = CABasicAnimation(keyPath: "transform.translation.y")
-        animation.fromValue = startTy
-        animation.toValue = endTy
-        animation.duration = duration
-        animation.timingFunction = CAMediaTimingFunction(name: .linear)
-        animation.fillMode = .forwards
-        animation.isRemovedOnCompletion = false
-        // beginTime in the past makes CA render the animation already-partially-
-        // elapsed when added — that's how a teleprompter VC added later catches
-        // up to a monitor that has been animating since play began.
-        if let bt = beginTime {
-            animation.beginTime = bt
-        }
-        animation.delegate = AnimationFinishDelegate { finished in
-            if finished { onFinish() }
-        }
-        scrollContainer.add(animation, forKey: "scroll")
-    }
-
-    func stopScrolling() {
-        scrollContainer.removeAnimation(forKey: "scroll")
-    }
-
-    func hasActiveAnimation() -> Bool {
-        return scrollContainer.animation(forKey: "scroll") != nil
-    }
-
-    func visualPosition() -> Double {
-        guard cachedTextHeight > 0 else { return 0 }
-        let rawTy = scrollContainer.presentation()?.transform.m42
-            ?? scrollContainer.transform.m42
-        // Inverse of `ty(forPosition:)`: when flip is on, ty was negated
-        // before being committed, so reverse that before solving for percent.
-        let normalTy = currentFlip ? -rawTy : rawTy
-        let percent = (bounds.height * 0.5 - normalTy) / cachedTextHeight
-        return max(0, min(1, Double(percent)))
-    }
-}
-
-private final class AnimationFinishDelegate: NSObject, CAAnimationDelegate {
-    let onFinish: (Bool) -> Void
-    init(_ onFinish: @escaping (Bool) -> Void) { self.onFinish = onFinish }
-    func animationDidStop(_ anim: CAAnimation, finished flag: Bool) { onFinish(flag) }
 }
 
 func nsColor(fromHex hex: String) -> NSColor {

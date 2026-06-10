@@ -35,6 +35,10 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
     private let fontSizeLabel = NSTextField(labelWithString: "Font: 64pt")
     private let mirrorCheckbox = NSButton(checkboxWithTitle: "Mirror (horizontal)", target: nil, action: nil)
     private let flipCheckbox = NSButton(checkboxWithTitle: "Flip (vertical)", target: nil, action: nil)
+    /// Pull-down listing the active script's cue markers (added via the 'B'
+    /// bookmark hotkey); choosing one seeks playback to that position.
+    private let bookmarkPopup = NSPopUpButton(frame: .zero, pullsDown: true)
+    private var renderedCues: [CueMarker] = []
 
     private var lastSeenContent: String = ""
     private var suppressEditorUpdate = false
@@ -178,6 +182,9 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
         flipCheckbox.target = self
         flipCheckbox.action = #selector(flipToggled)
 
+        bookmarkPopup.target = self
+        bookmarkPopup.action = #selector(bookmarkSelected)
+
         for label in [speedLabel, positionLabel, fontSizeLabel] {
             label.textColor = NSColor(white: 0.78, alpha: 1)
             label.font = NSFont.systemFont(ofSize: 12)
@@ -206,6 +213,9 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
             speedLabel, speedSlider,
             positionLabel, positionSlider,
             progressLabel,
+            spacer(8),
+            sectionHeader("Bookmarks"),
+            bookmarkPopup,
             spacer(8),
             sectionHeader("Appearance"),
             fontSizeLabel, fontSizeSlider,
@@ -402,13 +412,6 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
         bookmarkFlashTimer?.invalidate()
     }
 
-    /// Live animated position of the operator's monitor preview. AppDelegate
-    /// reads this so a teleprompter window opened mid-play can join at the
-    /// right scroll position instead of restarting from the play-start value.
-    func currentMonitorVisualPosition() -> Double {
-        return monitorView.currentVisualPosition()
-    }
-
     @objc private func segmentChanged() {
         let idx = segmentedControl.selectedSegment
         editorScrollView.isHidden = idx != 0
@@ -424,6 +427,7 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
             lastSeenContent = active.content
         }
         rebuildDisplayPopupIfNeeded(state)
+        rebuildBookmarkPopupIfNeeded(state)
 
         // When playback starts from a stopped state, swap the operator into
         // Monitor view so spacebar / arrows route to playback control instead
@@ -432,16 +436,8 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
             segmentedControl.selectedSegment = 1
             segmentChanged()
         }
-        // When playback stops, capture the live animated position into state so
-        // the operator slider doesn't snap back to a stale value.
-        if !state.playback.playing && lastPlayingState {
-            let visualPos = monitorView.currentVisualPosition()
-            if abs(visualPos - state.playback.position) > 0.0001 {
-                DispatchQueue.main.async { [weak self] in
-                    self?.store.dispatch(.setPosition(visualPos))
-                }
-            }
-        }
+        // On pause, AppDelegate.applyEngineFromState captures the engine's
+        // live position back into state, so the slider below stays accurate.
         lastPlayingState = state.playback.playing
 
         playPauseButton.title = state.playback.playing ? "Pause" : "Play"
@@ -491,6 +487,28 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
         let remainingSeconds = totalDistance * (1.0 - clamped) / rate
         let remainingMin = max(0, Int((remainingSeconds / 60).rounded()))
         return "\(pct)% through script • ~\(remainingMin) min remaining at current speed"
+    }
+
+    /// Rebuilds the bookmark pull-down when the active script's cues change.
+    /// The reducer keeps cues sorted by position, so menu order matches
+    /// script order. Item 0 is the pull-down's title and never selectable.
+    private func rebuildBookmarkPopupIfNeeded(_ state: AppState) {
+        let cues = state.activeScript?.cues ?? []
+        guard cues != renderedCues else { return }
+        renderedCues = cues
+        bookmarkPopup.removeAllItems()
+        bookmarkPopup.addItem(withTitle: cues.isEmpty ? "No bookmarks (press B to add)" : "Jump to bookmark (\(cues.count))…")
+        for cue in cues {
+            bookmarkPopup.addItem(withTitle: String(format: "%@ — %.0f%%", cue.label, cue.position * 100))
+            bookmarkPopup.lastItem?.representedObject = cue.id
+        }
+        bookmarkPopup.isEnabled = !cues.isEmpty
+    }
+
+    @objc private func bookmarkSelected() {
+        guard let cueId = bookmarkPopup.selectedItem?.representedObject as? UUID,
+              let cue = store.state.activeScript?.cues.first(where: { $0.id == cueId }) else { return }
+        store.dispatch(.setPosition(cue.position))
     }
 
     private var renderedDisplayIds: [UInt32] = []

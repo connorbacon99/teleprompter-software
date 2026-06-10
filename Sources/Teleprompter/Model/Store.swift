@@ -1,5 +1,4 @@
 import Foundation
-import QuartzCore
 
 final class Store {
     private(set) var state: AppState
@@ -155,41 +154,18 @@ func reduce(state: AppState, action: Action) -> AppState {
         }
 
     case .play:
-        if !s.playback.playing {
-            s.playback.playing = true
-            s.playback.playSessionStartTime = CACurrentMediaTime()
-            s.playback.playSessionStartPosition = s.playback.position
-        }
+        s.playback.playing = true
     case .pause:
         s.playback.playing = false
     case .togglePlay:
-        if s.playback.playing {
-            s.playback.playing = false
-        } else {
-            s.playback.playing = true
-            s.playback.playSessionStartTime = CACurrentMediaTime()
-            s.playback.playSessionStartPosition = s.playback.position
-        }
+        s.playback.playing.toggle()
     case .reset:
         s.playback.playing = false
         s.playback.position = 0
-        s.playback.playSessionStartTime = nil
-        s.playback.playSessionStartPosition = 0
     case .setPosition(let pos):
         s.playback.position = clamp01(pos)
-        if s.playback.playing {
-            s.playback.playSessionStartTime = CACurrentMediaTime()
-            s.playback.playSessionStartPosition = s.playback.position
-        }
     case .setSpeed(let v):
         s.playback.speed = clampSpeed(v)
-    case .changePlaySpeed(let v, let livePos):
-        s.playback.speed = clampSpeed(v)
-        if s.playback.playing {
-            s.playback.position = clamp01(livePos)
-            s.playback.playSessionStartTime = CACurrentMediaTime()
-            s.playback.playSessionStartPosition = s.playback.position
-        }
     case .setFontSize(let v):
         s.appearance.fontSizePt = max(12, min(300, v))
     case .setMirror(let m):

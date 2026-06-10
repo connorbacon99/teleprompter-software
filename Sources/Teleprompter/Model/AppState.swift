@@ -122,15 +122,6 @@ struct Playback: Codable, Equatable {
     var playing: Bool
     var position: Double
     var speed: Double
-    var countdownEnabled: Bool
-    var countdownSeconds: Int
-    /// CACurrentMediaTime at which the current play session (or seek/speed
-    /// epoch) began. Both VCs anchor their CABasicAnimation.beginTime to this
-    /// value so they render the same progress regardless of when each VC's
-    /// animation was actually added to its layer.
-    var playSessionStartTime: TimeInterval?
-    /// The position at the start of the current play session/epoch.
-    var playSessionStartPosition: Double
 }
 
 struct DisplayInfo: Codable, Equatable {
@@ -195,11 +186,7 @@ struct AppState: Codable, Equatable {
             playback: Playback(
                 playing: false,
                 position: 0,
-                speed: 1.0,
-                countdownEnabled: true,
-                countdownSeconds: 3,
-                playSessionStartTime: nil,
-                playSessionStartPosition: 0
+                speed: 1.0
             ),
             displays: [],
             selectedDisplayId: nil,
@@ -276,11 +263,6 @@ enum Action {
     case recToggle(now: TimeInterval)
     case recReset(wallclock: Date)
     case recSetCountdown(seconds: Int)
-
-    /// Coalesced action for live speed change during play. Captures the live
-    /// visual position from the operator so both VCs restart at the same
-    /// epoch (sessionStartTime updated together) without speed-change drift.
-    case changePlaySpeed(speed: Double, livePosition: Double)
 
     case projectLoad(AppState)
 }

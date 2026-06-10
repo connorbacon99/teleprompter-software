@@ -42,12 +42,8 @@ final class MonitorPreviewView: NSView {
         if let token = engineToken { engine.unsubscribe(token) }
     }
 
-    func currentVisualPosition() -> Double {
-        return engine.currentPosition
-    }
-
     override func scrollWheel(with event: NSEvent) {
-        guard let state = lastState else { super.scrollWheel(with: event); return }
+        guard lastState != nil else { super.scrollWheel(with: event); return }
         let dy = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.deltaY * 4
         let pixelsPerUnit: CGFloat = max(renderSize.height, 1)
         let positionDelta = -Double(dy) / Double(pixelsPerUnit) * 0.6
@@ -55,7 +51,6 @@ final class MonitorPreviewView: NSView {
         if abs(newPos - engine.currentPosition) > 0.0001 {
             store.dispatch(.setPosition(newPos))
         }
-        _ = state // silence unused
     }
 
     override func layout() {
