@@ -235,7 +235,26 @@ func reduce(state: AppState, action: Action) -> AppState {
             s.recordingTimer.phase = .running(start: now - elapsed)
         }
 
-    case .recReset:
+    case .recReset(let wallclock):
+        // Resetting a non-idle timer closes the current recording session.
+        // If the active script already has log entries, append a synthetic
+        // `.session` divider so the tracker table and CSV show where session
+        // N ended and N+1 began. Owning this here (not in the views) keeps
+        // TrackerView and TrackerHUDView from ever drifting apart on it.
+        if s.recordingTimer.phase != .idle,
+           let idx = s.scripts.firstIndex(where: { $0.id == s.activeScriptId }),
+           !s.scripts[idx].recordingLog.isEmpty {
+            let priorDividers = s.scripts[idx].recordingLog.filter { $0.kind == .session }.count
+            let divider = RecordingLogEntry(
+                id: UUID(),
+                timeSeconds: 0,
+                line: sessionDividerLabel(priorDividerCount: priorDividers, wallclock: wallclock),
+                note: "",
+                kind: .session,
+                wallclock: wallclock
+            )
+            s.scripts[idx].recordingLog.append(divider)
+        }
         s.recordingTimer.phase = .idle
 
     case .recSetCountdown(let seconds):

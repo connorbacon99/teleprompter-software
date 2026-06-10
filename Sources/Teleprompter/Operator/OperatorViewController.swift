@@ -1,4 +1,5 @@
 import Cocoa
+import QuartzCore
 
 final class OperatorViewController: NSViewController, NSTextViewDelegate, NSTextDelegate {
     private let store: Store
@@ -528,7 +529,11 @@ final class OperatorViewController: NSViewController, NSTextViewDelegate, NSText
 
     private func addBookmarkAtCurrentPosition() {
         guard let scriptId = store.state.activeScript?.id else { return }
-        let elapsed = trackerView.currentRecordingElapsedSeconds()
+        // Read the recording timer straight from the store — not through a
+        // sibling view's mirror of it. Idle or mid-countdown (elapsed < 0)
+        // falls back to the wallclock-based label.
+        let elapsed = store.state.recordingTimer.elapsedSeconds(now: CACurrentMediaTime())
+            .flatMap { $0 >= 0 ? $0 : nil }
         let label = TrackerView.bookmarkLabel(elapsedSeconds: elapsed, wallclock: Date())
         let position = engine.currentPosition
         store.dispatch(.cueAdd(scriptId: scriptId, label: label, position: position))

@@ -244,6 +244,11 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
         tickTimer?.invalidate()
         tickTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             self?.updateTimerDisplay()
+            // The button title depends on wallclock too, not just state: when
+            // the countdown crosses zero the phase value is unchanged but
+            // "Cancel" must become "Pause". Without this an operator clicking
+            // what still says "Cancel" would silently pause instead.
+            self?.updateStartStopButton()
         }
     }
 
@@ -251,14 +256,6 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     /// Negative values indicate countdown (e.g. -2.4 → 2.4 s remaining).
     private func currentElapsedSeconds() -> Double? {
         return recordingTimer.elapsedSeconds(now: CACurrentMediaTime())
-    }
-
-    /// Public accessor for the live recording-session elapsed time, in
-    /// seconds. Returns nil if the timer is idle or still counting down — in
-    /// either case the bookmark hotkey falls back to wallclock for its label.
-    func currentRecordingElapsedSeconds() -> Double? {
-        guard let s = currentElapsedSeconds(), s >= 0 else { return nil }
-        return s
     }
 
     private func updateTimerDisplay() {
@@ -310,18 +307,17 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     @objc private func resetAction() {
-        // Reset is destructive — confirm if a session is in progress.
-        let needsConfirm: Bool = {
-            switch recordingTimer.phase {
-            case .idle: return false
-            default: return true
-            }
-        }()
-        guard needsConfirm else {
-            // Reset of an already-idle timer is a no-op; don't insert a
-            // synthetic session divider for it (there was no session
-            // boundary to demarcate).
-            store.dispatch(.recReset)
+        Self.confirmTimerReset(store: store, window: window)
+    }
+
+    /// Shared Reset flow for TrackerView and TrackerHUDView: dispatches
+    /// immediately when the timer is idle (nothing to lose), otherwise asks
+    /// for confirmation first. The session-divider bookkeeping happens in the
+    /// reducer's `.recReset` case, so both surfaces behave identically by
+    /// construction.
+    static func confirmTimerReset(store: Store, window: NSWindow?) {
+        if case .idle = store.state.recordingTimer.phase {
+            store.dispatch(.recReset(wallclock: Date()))
             return
         }
         let alert = NSAlert()
@@ -330,9 +326,7 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Reset")
         alert.addButton(withTitle: "Cancel")
-        let confirm: () -> Void = { [weak self] in
-            self?.applyResetWithDivider()
-        }
+        let confirm = { store.dispatch(.recReset(wallclock: Date())) }
         if let win = window {
             alert.beginSheetModal(for: win) { response in
                 if response == .alertFirstButtonReturn { confirm() }
@@ -341,44 +335,6 @@ final class TrackerView: NSView, NSTableViewDataSource, NSTableViewDelegate {
             confirm()
         }
     }
-
-    /// Confirmed-reset path: drops a synthetic `.session` divider into the
-    /// recording log so the tracker table (and the exported CSV) show where
-    /// session N ended and session N+1 began. Skipped when there are no
-    /// existing entries — an immediate reset with an empty log doesn't need
-    /// a divider.
-    private func applyResetWithDivider() {
-        if let scriptId = activeScriptId, !entries.isEmpty {
-            let priorSessions = entries.filter { $0.kind == .session }.count
-            let now = Date()
-            let label = Self.sessionDividerLabel(priorDividerCount: priorSessions, wallclock: now)
-            let entry = RecordingLogEntry(
-                id: UUID(),
-                timeSeconds: 0,
-                line: label,
-                note: "",
-                kind: .session,
-                wallclock: now
-            )
-            store.dispatch(.recordingLogAdd(scriptId: scriptId, entry: entry))
-        }
-        store.dispatch(.recReset)
-    }
-
-    /// Builds the label that goes on a session-divider entry. The new session
-    /// number is `priorDividerCount + 2` because the implicit first session
-    /// (entries before any divider) is Session 1, so the first divider opens
-    /// Session 2.
-    static func sessionDividerLabel(priorDividerCount: Int, wallclock: Date) -> String {
-        let newSessionNumber = priorDividerCount + 2
-        return "Session \(newSessionNumber) started \(sessionStartedFormatter.string(from: wallclock))"
-    }
-
-    private static let sessionStartedFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return f
-    }()
 
     @objc private func countdownChanged() {
         store.dispatch(.recSetCountdown(seconds: countdownStepper.integerValue))

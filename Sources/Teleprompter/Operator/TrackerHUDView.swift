@@ -216,53 +216,9 @@ final class TrackerHUDView: NSView {
     }
 
     @objc private func resetAction() {
-        // Mirror TrackerView's confirm flow so behavior is identical regardless
-        // of which surface the operator hits Reset from.
-        let needsConfirm: Bool = {
-            switch recordingTimer.phase {
-            case .idle: return false
-            default: return true
-            }
-        }()
-        guard needsConfirm else {
-            store.dispatch(.recReset)
-            return
-        }
-        let alert = NSAlert()
-        alert.messageText = "Reset timer?"
-        alert.informativeText = "This zeroes the recording timer. Logged entries are kept — only the elapsed time goes back to 0:00."
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Reset")
-        alert.addButton(withTitle: "Cancel")
-        let confirm: () -> Void = { [weak self] in
-            self?.applyResetWithDivider()
-        }
-        if let win = window {
-            alert.beginSheetModal(for: win) { response in
-                if response == .alertFirstButtonReturn { confirm() }
-            }
-        } else if alert.runModal() == .alertFirstButtonReturn {
-            confirm()
-        }
-    }
-
-    private func applyResetWithDivider() {
-        let state = store.state
-        if let scriptId = state.activeScript?.id, !(state.activeScript?.recordingLog.isEmpty ?? true) {
-            let priorSessions = (state.activeScript?.recordingLog ?? []).filter { $0.kind == .session }.count
-            let now = Date()
-            let label = TrackerView.sessionDividerLabel(priorDividerCount: priorSessions, wallclock: now)
-            let entry = RecordingLogEntry(
-                id: UUID(),
-                timeSeconds: 0,
-                line: label,
-                note: "",
-                kind: .session,
-                wallclock: now
-            )
-            store.dispatch(.recordingLogAdd(scriptId: scriptId, entry: entry))
-        }
-        store.dispatch(.recReset)
+        // Same confirm flow as the Tracker tab; the session-divider logic
+        // lives in the reducer so both surfaces behave identically.
+        TrackerView.confirmTimerReset(store: store, window: window)
     }
 
     @objc private func logFlub() { logEntry(kind: .flub) }

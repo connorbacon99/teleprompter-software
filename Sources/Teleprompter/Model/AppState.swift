@@ -82,6 +82,30 @@ struct Script: Codable, Equatable, Identifiable {
     var content: String
     var cues: [CueMarker]
     var recordingLog: [RecordingLogEntry]
+
+    init(id: UUID, name: String, content: String, cues: [CueMarker], recordingLog: [RecordingLogEntry]) {
+        self.id = id
+        self.name = name
+        self.content = content
+        self.cues = cues
+        self.recordingLog = recordingLog
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, content, cues, recordingLog
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(UUID.self, forKey: .id)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.content = try c.decode(String.self, forKey: .content)
+        // Tolerant defaults: a state.json written by a build that predates
+        // cues or recordingLog must not fail the snapshot decode — load()
+        // treats a decode error as corruption and discards every script.
+        self.cues = try c.decodeIfPresent([CueMarker].self, forKey: .cues) ?? []
+        self.recordingLog = try c.decodeIfPresent([RecordingLogEntry].self, forKey: .recordingLog) ?? []
+    }
 }
 
 struct Appearance: Codable, Equatable {
@@ -246,9 +270,11 @@ enum Action {
     case setTeleprompterOpen(Bool)
 
     /// Recording-timer state transitions. `now` is captured at dispatch time
-    /// (`CACurrentMediaTime()`) so the reducer stays pure.
+    /// (`CACurrentMediaTime()`) so the reducer stays pure; likewise
+    /// `wallclock` on reset, which stamps the session-divider entry the
+    /// reducer may append to the active script's recording log.
     case recToggle(now: TimeInterval)
-    case recReset
+    case recReset(wallclock: Date)
     case recSetCountdown(seconds: Int)
 
     /// Coalesced action for live speed change during play. Captures the live
@@ -269,10 +295,27 @@ extension Action {
     var isRecordingLogMutation: Bool {
         switch self {
         case .recordingLogAdd, .recordingLogUpdateLine, .recordingLogUpdateNote,
-             .recordingLogSetKind, .recordingLogRemove, .recordingLogClear:
+             .recordingLogSetKind, .recordingLogRemove, .recordingLogClear,
+             // recReset can append a synthetic `.session` divider to the log.
+             .recReset:
             return true
         default:
             return false
         }
     }
 }
+
+/// Builds the label for a synthetic `.session` divider entry. The new session
+/// number is `priorDividerCount + 2` because the implicit first session
+/// (entries before any divider) is Session 1, so the first divider opens
+/// Session 2.
+func sessionDividerLabel(priorDividerCount: Int, wallclock: Date) -> String {
+    let newSessionNumber = priorDividerCount + 2
+    return "Session \(newSessionNumber) started \(sessionStartedFormatter.string(from: wallclock))"
+}
+
+private let sessionStartedFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+    return f
+}()

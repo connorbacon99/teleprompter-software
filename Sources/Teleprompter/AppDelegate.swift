@@ -162,23 +162,20 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             eventClass: OSType(kEventClassKeyboard),
             eventKind: UInt32(kEventHotKeyPressed)
         )
-        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
         let handlerStatus = InstallEventHandler(
             GetApplicationEventTarget(),
-            { (_, _, userData) -> OSStatus in
-                guard let userData = userData else { return noErr }
+            { (_, _, _) -> OSStatus in
                 // The Carbon handler can fire on a non-main thread; hop back
                 // to main before posting the notification so observers
                 // (TrackerView, store dispatch) stay on AppKit's thread.
                 DispatchQueue.main.async {
                     NotificationCenter.default.post(name: .teleprompterFlubHotkey, object: nil)
                 }
-                _ = userData // keep the userData reference live for the compiler
                 return noErr
             },
             1,
             &eventSpec,
-            selfPtr,
+            nil,
             &flubHotKeyHandler
         )
         if handlerStatus != noErr {

@@ -92,6 +92,9 @@ final class ReducerTests: XCTestCase {
             .recordingLogSetKind(scriptId: scriptId, entryId: entryId, kind: .chapter),
             .recordingLogRemove(scriptId: scriptId, entryId: entryId),
             .recordingLogClear(scriptId: scriptId),
+            // recReset can append a synthetic .session divider to the log,
+            // so it must also hit the synchronous save path.
+            .recReset(wallclock: Date()),
         ]
         for action in logActions {
             XCTAssertTrue(action.isRecordingLogMutation, "\(action) must be flagged for immediate save")
@@ -439,16 +442,16 @@ final class ReducerTests: XCTestCase {
         // First divider = priorCount 0 → opens Session 2 (the implicit
         // first session of entries before any divider is Session 1).
         XCTAssertEqual(
-            TrackerView.sessionDividerLabel(priorDividerCount: 0, wallclock: date),
+            sessionDividerLabel(priorDividerCount: 0, wallclock: date),
             "Session 2 started 2026-05-11 14:30:07"
         )
         // Second divider opens Session 3, etc.
         XCTAssertEqual(
-            TrackerView.sessionDividerLabel(priorDividerCount: 1, wallclock: date),
+            sessionDividerLabel(priorDividerCount: 1, wallclock: date),
             "Session 3 started 2026-05-11 14:30:07"
         )
         XCTAssertEqual(
-            TrackerView.sessionDividerLabel(priorDividerCount: 4, wallclock: date),
+            sessionDividerLabel(priorDividerCount: 4, wallclock: date),
             "Session 6 started 2026-05-11 14:30:07"
         )
     }
@@ -505,27 +508,73 @@ final class ReducerTests: XCTestCase {
         XCTAssertEqual(dividerFields[5], "Session 2 started 2026-05-11 14:30:07")
     }
 
-    func testTrackerResetWithEntriesInsertsSessionDividerThenIdle() {
-        // End-to-end: with at least one prior log entry, hitting Reset must
-        // append a synthetic .session entry to the log. We simulate the
-        // confirmed-reset path by dispatching the same action the
-        // applyResetWithDivider helper dispatches, since the alert flow
-        // can't run headlessly.
-        var initial = AppState.initial()
-        let scriptId = initial.activeScriptId
+    func testRecResetWhileRunningWithEntriesInsertsSessionDividerThenIdle() {
+        // The reducer owns the divider-on-reset rule: resetting a non-idle
+        // timer with existing log entries must append a .session divider to
+        // the active script's log and return the timer to idle.
+        var state = AppState.initial()
+        let scriptId = state.activeScriptId
         let prior = RecordingLogEntry(id: UUID(), timeSeconds: 5, line: "flub before reset", note: "", kind: .flub)
-        initial = reduce(state: initial, action: .recordingLogAdd(scriptId: scriptId, entry: prior))
+        state = reduce(state: state, action: .recordingLogAdd(scriptId: scriptId, entry: prior))
+        state = reduce(state: state, action: .recToggle(now: 1000))
 
-        let now = Date()
-        let label = TrackerView.sessionDividerLabel(priorDividerCount: 0, wallclock: now)
-        let divider = RecordingLogEntry(id: UUID(), timeSeconds: 0, line: label, note: "", kind: .session, wallclock: now)
-        let after = reduce(state: initial, action: .recordingLogAdd(scriptId: scriptId, entry: divider))
+        let when = Date(timeIntervalSince1970: 1_700_000_000)
+        state = reduce(state: state, action: .recReset(wallclock: when))
 
-        let log = after.activeScript?.recordingLog ?? []
+        let log = state.activeScript?.recordingLog ?? []
         XCTAssertEqual(log.count, 2)
         XCTAssertEqual(log[0].kind, .flub)
         XCTAssertEqual(log[1].kind, .session)
-        XCTAssertTrue(log[1].line.hasPrefix("Session 2 started"))
+        XCTAssertTrue(log[1].line.hasPrefix("Session 2 started"), "got \(log[1].line)")
+        XCTAssertEqual(log[1].wallclock, when, "divider must be stamped with the dispatched wallclock")
+        XCTAssertEqual(state.recordingTimer.phase, .idle)
+    }
+
+    func testRecResetWhileIdleDoesNotInsertDivider() {
+        // Idle reset is a no-op for the log even when entries exist — there
+        // was no live session to demarcate.
+        var state = AppState.initial()
+        let scriptId = state.activeScriptId
+        let prior = RecordingLogEntry(id: UUID(), timeSeconds: 5, line: "old entry", note: "", kind: .flub)
+        state = reduce(state: state, action: .recordingLogAdd(scriptId: scriptId, entry: prior))
+
+        state = reduce(state: state, action: .recReset(wallclock: Date()))
+
+        XCTAssertEqual(state.activeScript?.recordingLog.count, 1, "idle reset must not append a session divider")
+        XCTAssertEqual(state.recordingTimer.phase, .idle)
+    }
+
+    func testRecResetWithEmptyLogDoesNotInsertDivider() {
+        // A reset before anything was logged needs no divider — the table
+        // would otherwise open with a meaningless "Session 2" header.
+        var state = AppState.initial()
+        state = reduce(state: state, action: .recToggle(now: 1000))
+
+        state = reduce(state: state, action: .recReset(wallclock: Date()))
+
+        XCTAssertEqual(state.activeScript?.recordingLog.count, 0)
+        XCTAssertEqual(state.recordingTimer.phase, .idle)
+    }
+
+    func testRecResetSessionNumbersIncrementAcrossResets() {
+        // Divider numbering counts prior dividers in the log: first reset
+        // opens Session 2, the next opens Session 3.
+        var state = AppState.initial()
+        let scriptId = state.activeScriptId
+        let entry1 = RecordingLogEntry(id: UUID(), timeSeconds: 1, line: "s1 flub", note: "", kind: .flub)
+        state = reduce(state: state, action: .recordingLogAdd(scriptId: scriptId, entry: entry1))
+        state = reduce(state: state, action: .recToggle(now: 1000))
+        state = reduce(state: state, action: .recReset(wallclock: Date()))
+
+        let entry2 = RecordingLogEntry(id: UUID(), timeSeconds: 1, line: "s2 flub", note: "", kind: .flub)
+        state = reduce(state: state, action: .recordingLogAdd(scriptId: scriptId, entry: entry2))
+        state = reduce(state: state, action: .recToggle(now: 2000))
+        state = reduce(state: state, action: .recReset(wallclock: Date()))
+
+        let dividers = (state.activeScript?.recordingLog ?? []).filter { $0.kind == .session }
+        XCTAssertEqual(dividers.count, 2)
+        XCTAssertTrue(dividers[0].line.hasPrefix("Session 2 started"))
+        XCTAssertTrue(dividers[1].line.hasPrefix("Session 3 started"))
     }
 
     func testProgressIndicatorTextClampsPositionOutsideUnitInterval() {
@@ -599,12 +648,46 @@ final class ReducerTests: XCTestCase {
     func testRecResetReturnsToIdleRegardlessOfPriorPhase() {
         var s = AppState.initial()
         s.recordingTimer.phase = .running(start: 1234)
-        s = reduce(state: s, action: .recReset)
+        s = reduce(state: s, action: .recReset(wallclock: Date()))
         XCTAssertEqual(s.recordingTimer.phase, .idle)
 
         s.recordingTimer.phase = .paused(elapsed: 600)
-        s = reduce(state: s, action: .recReset)
+        s = reduce(state: s, action: .recReset(wallclock: Date()))
         XCTAssertEqual(s.recordingTimer.phase, .idle)
+    }
+
+    // MARK: - Tolerant Script decoding
+
+    func testScriptDecodesWithoutRecordingLogOrCuesFields() throws {
+        // A state.json written by a build that predates cues/recordingLog
+        // must still decode — a throw here would make Persistence.load()
+        // treat the whole snapshot as corrupt and silently discard every
+        // saved script.
+        let legacyJSON = """
+        {
+            "id": "11111111-2222-3333-4444-555555555555",
+            "name": "Module 3",
+            "content": "Some script text."
+        }
+        """
+        let script = try JSONDecoder().decode(Script.self, from: Data(legacyJSON.utf8))
+        XCTAssertEqual(script.name, "Module 3")
+        XCTAssertEqual(script.content, "Some script text.")
+        XCTAssertEqual(script.cues, [], "missing cues must default to empty, not throw")
+        XCTAssertEqual(script.recordingLog, [], "missing recordingLog must default to empty, not throw")
+    }
+
+    func testScriptRoundTripsThroughCodable() throws {
+        let original = Script(
+            id: UUID(),
+            name: "Round trip",
+            content: "line one\nline two",
+            cues: [CueMarker(id: UUID(), label: "Bookmark 0:00:30", position: 0.25)],
+            recordingLog: [RecordingLogEntry(id: UUID(), timeSeconds: 30, line: "line one", note: "n", kind: .clean)]
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(Script.self, from: data)
+        XCTAssertEqual(decoded, original)
     }
 
     func testRecSetCountdownClampsTo0Through30() {
